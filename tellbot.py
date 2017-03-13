@@ -115,15 +115,16 @@ class NotificationDistributorSQLite(NotificationDistributor):
     def query_messages(self, user):
         user = basebot.normalize_nick(user)
         with self.lock:
-            self.curs.execute('SELECT * FROM message WHERE recipient = ?',
-                              (user,))
+            self.curs.execute('SELECT * FROM message WHERE recipient = ? '
+                'ORDER BY timestamp', (user,))
             return self._unwrap_messages(self.curs.fetchall())
 
     def pop_messages(self, user):
         user = basebot.normalize_nick(user)
         with self:
             self.curs.execute('SELECT _rowid_, sender, text, '
-                'timestamp FROM messages WHERE recipient = ?', (user,))
+                'timestamp FROM messages WHERE recipient = ? '
+                'ORDER BY timestamp', (user,))
             msgs = tuple(self.curs.fetchall())
             self.curs.executemany('DELETE FROM messages WHERE _rowid_ = ?',
                                   (str(el[0]) for el in msgs))
