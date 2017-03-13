@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: ascii -*-
 
-import sys, os, time
+import sys, os, re, time
 import threading
 
 import basebot
+
+def make_mention(nick):
+    return '@' + re.sub(r'\s+', '', nick)
 
 class OrderedSet:
     def __init__(self, base=()):
@@ -58,6 +61,15 @@ class TellBot(basebot.Bot):
 
     BOTNAME = 'TellBot'
     NICKNAME = 'TellBot'
+
+    def handle_chat(self, msg, meta):
+        distr, reply = self.manager.distributor, meta['reply']
+        user = distr.query_user(msg['sender']['name'])
+        messages = distr.pop_messages(user)
+        now = time.time()
+        for m in messages:
+            reply('[%s, %s ago] %s' % (make_mention(m['from']),
+                basebot.format_delta(now - m['timestamp']), m['text']))
 
     def handle_command(self, cmdline, meta):
         def parse_userlist(base, it):
@@ -115,7 +127,8 @@ class TellBot(basebot.Bot):
                 return
 
             # Collect metadata.
-            message = {'text': text, 'timestamp': time.time()}
+            message = {'text': text, 'from': meta['msg']['sender']['name'],
+                       'timestamp': time.time()}
 
             # Schedule message.
             for user in recipients:
