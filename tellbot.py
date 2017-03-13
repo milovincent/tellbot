@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: ascii -*-
 
-import sys, os, re, time
+import sys, os, re, time, operator
 import threading
 import sqlite3
 
@@ -15,10 +15,16 @@ def make_mention(nick):
     return '@' + re.sub(r'\s+', '', nick)
 
 class OrderedSet:
-    def __init__(self, base=()):
+    def __init__(self, base=(), key=lambda x: x):
         self.list = []
         self.set = set()
+        self.key = key
         self.extend(base)
+
+    def __bool__(self):
+        return bool(self.list)
+    def __nonzero__(self):
+        return bool(self.list)
 
     def __iter__(self):
         return iter(self.list)
@@ -28,8 +34,9 @@ class OrderedSet:
         self.set.clear()
 
     def append(self, item):
-        if item not in self.set:
-            self.set.add(item)
+        key = self.key(item)
+        if key not in self.set:
+            self.set.add(key)
             self.list.append(item)
 
     def extend(self, items):
@@ -37,8 +44,9 @@ class OrderedSet:
             self.append(item)
 
     def discard(self, item):
-        if item in self.set:
-            self.set.remove(item)
+        key = self.key(item)
+        if key in self.set:
+            self.set.remove(key)
             self.list.remove(item)
 
     def discard_all(self, items):
@@ -64,7 +72,7 @@ class NotificationDistributorMemory(NotificationDistributor):
         self.lock = threading.RLock()
 
     def query_user(self, name):
-        return basebot.normalize_nick(name)
+        return (basebot.normalize_nick(name), seminormalize_nick(name))
 
     def query_group(self, name):
         with self.lock:
@@ -138,9 +146,10 @@ class NotificationDistributorSQLite(NotificationDistributor):
                                   'delivered REAL'
                               ')')
             self.curs.execute('CREATE TABLE IF NOT EXISTS groups ('
-                                  'group TEXT,'
+                                  'groupname TEXT,'
                                   'member TEXT,'
-                                  'PRIMARY KEY (group, member)'
+                                  'name TEXT,'
+                                  'PRIMARY KEY (groupname, member)'
                               ')')
 
     def _unwrap_message(self, item):
@@ -155,19 +164,20 @@ class NotificationDistributorSQLite(NotificationDistributor):
                 message.get('delivered_to'), message.get('delivered'))
 
     def query_user(self, name):
-        return basebot.normalize_nick(name)
+        return (basebot.normalize_nick(name), seminormalize_nick(name))
 
     def query_group(self, name):
         with self.lock:
-            self.curs.execute('SELECT member FROM groups WHERE name = ? '
-                'ORDER BY _rowid_', (name,))
-            return list(self.curs.fetchall())
+            self.curs.execute('SELECT member, name FROM groups '
+                'WHERE groupname = ? ORDER BY _rowid_', (name,))
+            return list(map(tuple, self.curs.fetchall()))
 
     def update_group(self, name, members):
         with self:
-            self.curs.execute('DELETE FROM groups WHERE name = ?', (name,))
-            self.curs.execute('INSERT INTO groups VALUES (?, ?)',
-                              ((name, m) for m in members))
+            self.curs.execute('DELETE FROM groups WHERE groupname = ?',
+                              (name,))
+            self.curs.executemany('INSERT INTO groups VALUES (?, ?, ?)',
+                                  ((name, m, n) for m, n in members))
 
     def query_messages(self, user):
         user = basebot.normalize_nick(user)
@@ -235,27 +245,44 @@ class TellBot(basebot.Bot):
 
     def handle_command(self, cmdline, meta):
         # Common part of the argument parsers.
-        def parse_userlist(base, it):
+        def parse_userlist(base, it, get_group=False):
+            def abort():
+                reply('Please specify a group first.')
+                return Ellipsis, count
+            count = 0
             for arg in it:
                 if arg.startswith('@'): # Add user.
+                    if get_group: return abort()
                     base.append(distr.query_user(arg[1:]))
+                    count += 1
                 elif arg.startswith('*'): # Add group.
+                    if get_group: return arg, count
                     base.extend(distr.query_group(arg[1:]))
+                    count += 1
                 elif arg.startswith('+@'): # Add user (long form).
+                    if get_group: return abort()
                     base.append(distr.query_user(arg[2:]))
+                    count += 1
                 elif arg.startswith('+*'): # Add group (long form).
+                    if get_group: return abort()
                     base.extend(distr.query_group(arg[2:]))
+                    count += 1
                 elif arg.startswith('-@'): # Discard user.
+                    if get_group: return abort()
                     base.discard(distr.query_user(arg[2:]))
+                    count += 1
                 elif arg.startswith('-*'): # Discard group.
+                    if get_group: return abort()
                     base.discard_all(distr.query_group(arg[2:]))
+                    count += 1
                 elif arg.startswith('--'): # Option.
-                    return arg
+                    return arg, count
                 elif arg.startswith('-'): # Avoid confusion with above.
                     reply('Single-letter options are not supported.')
-                    return Ellipsis
+                    return Ellipsis, count
                 else: # Start of normal arguments.
-                    return arg
+                    return arg, count
+            return None, count
 
         # Reply with the users from a given list.
         def display_group(groupname, members, ping, comment):
@@ -263,7 +290,7 @@ class TellBot(basebot.Bot):
                 ' ' if comment else '', comment)
             if members:
                 tr = make_mention if ping else seminormalize_nick
-                lst = ', '.join(map(tr, members))
+                lst = ', '.join(tr(el[1]) for el in members)
             else:
                 lst = '-none-'
             reply(head + lst)
@@ -275,9 +302,10 @@ class TellBot(basebot.Bot):
         # Send a message.
         if cmdline[0] == '!tell':
             # Parse arguments.
-            recipients, text, it = OrderedSet(), None, iter(cmdline[1:])
+            recipients, text = OrderedSet(key=operator.itemgetter(0)), None
+            it = iter(cmdline[1:])
             while 1:
-                arg = parse_userlist(recipients, it)
+                arg, count = parse_userlist(recipients, it)
                 if arg is None:
                     break
                 elif arg is Ellipsis:
@@ -294,7 +322,7 @@ class TellBot(basebot.Bot):
                 else:
                     text = meta['line'][arg.offset:]
                     break
-            recipients = tuple(recipients)
+            recipients = tuple(basebot.normalize_nick(el[0]) for el in recipients)
 
             # Abort if no text.
             if text is None:
@@ -339,22 +367,20 @@ class TellBot(basebot.Bot):
 
         # Update a group.
         elif cmdline[0] == '!tgroup':
-            # Dismiss bad usages.
-            if len(cmdline) == 1 or not cmdline[1].startswith('*'):
-                reply('Please specify a group to show or update.')
-                return
-
             # Parse arguments.
-            groupname = cmdline[1][1:]
-            old_members = distr.query_group(groupname)
-            members, ping = OrderedSet(old_members), False
-            it = iter(cmdline[2:])
+            groupname, members, ping = None, None, False
+            it, count = iter(cmdline[1:]), 0
             while 1:
-                arg = parse_userlist(members, it)
+                arg, cnt = parse_userlist(members, it, (groupname is None))
+                count += cnt
                 if arg is None:
                     break
                 elif arg is Ellipsis:
                     return
+                elif arg.startswith('*'):
+                    groupname = arg[1:]
+                    old_members = distr.query_group(groupname)
+                    members = OrderedSet(old_members, key=operator.itemgetter(0))
                 elif arg == '--ping':
                     ping = True
                 elif arg.startswith('--') and arg != '--':
@@ -363,11 +389,14 @@ class TellBot(basebot.Bot):
                 else:
                     reply('Please specify group changes only.')
                     return
+            if groupname is None:
+                reply('Please specify a group to show or change.')
+                return
 
             # Display old membership.
             display_group(groupname, old_members, ping,
-                          '' if len(cmdline) == 2 else 'before')
-            if len(cmdline) == 2: return
+                          '' if count == 0 else 'before')
+            if count == 0: return
 
             # Apply changes.
             distr.update_group(groupname, tuple(members))
