@@ -164,9 +164,9 @@ class NotificationDistributorSQLite(NotificationDistributor):
 
     def query_delivery(self, msgid):
         with self.lock:
-            self.curs.execute('SELECT * FROM messages '
+            self.curs.execute('SELECT _rowid_, * FROM messages '
                 'WHERE delivered_to = ?', (msgid,))
-            res = self.curs.fetch()
+            res = self.curs.fetchone()
             if res is None: return None
             return self._unwrap_message(res)
 
@@ -231,7 +231,7 @@ class TellBot(basebot.Bot):
 
         basebot.Bot.handle_command(self, cmdline, meta)
         distr = self.manager.distributor
-        sender, reply = meta['msg']['sender'], meta['reply']
+        sender, reply = meta['msg']['sender']['name'], meta['reply']
 
         if cmdline[0] == '!tell':
             # Parse arguments.
@@ -277,9 +277,13 @@ class TellBot(basebot.Bot):
 
         elif cmdline[0] == '!reply':
             # Determine recipient.
-            cause = distr.query_delivery(meta['msg']['id'])
+            if meta['msg']['parent'] is None:
+                reply('Nothing to reply to.')
+                return
+            cause = distr.query_delivery(meta['msg']['parent'])
             if cause is None:
                 reply('Message not recognized.')
+                return
             recipient = distr.query_user(cause['from'])
 
             # Abort if no text.
@@ -288,9 +292,12 @@ class TellBot(basebot.Bot):
                 return
 
             # Schedule message.
-            text = meta['msg']['line'][cmdline[1].offset:]
+            text = meta['line'][cmdline[1].offset:]
             distr.add_message(cause['from'], {'text': text, 'from': sender,
                 'timestamp': time.time(), 'to': recipient})
+
+            # Inform user.
+            reply('Message will be delivered.')
 
 class GCThread(threading.Thread):
     def __init__(self, distr):
