@@ -187,14 +187,16 @@ class TellBot(basebot.Bot):
     NICKNAME = 'TellBot'
 
     def handle_chat(self, msg, meta):
+        # Add a delivery notice.
         def handle_delivery(reply):
             m = seqs.pop(reply.id, None)
             if m: distr.add_delivery(m, reply.data.id, reply.data.time)
+
         distr, reply = self.manager.distributor, meta['reply']
         user = distr.query_user(msg['sender']['name'])
-        messages = distr.pop_messages(user)
-        now = time.time()
-        seqs = {}
+        messages, now, seqs = distr.pop_messages(user), time.time(), {}
+
+        # Deliver messages.
         for m in messages:
             seq = reply('[%s, %s ago] %s' % (make_mention(m['from']),
                 basebot.format_delta(now - m['timestamp'], fractions=False),
