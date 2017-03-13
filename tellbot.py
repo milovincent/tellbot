@@ -127,7 +127,6 @@ class TellBot(basebot.Bot):
             else:
                 reply('Message will be delivered to no-one.')
 
-
 class TellBotManager(basebot.BotManager):
     def __init__(self, **config):
         basebot.BotManager.__init__(self, **config)
