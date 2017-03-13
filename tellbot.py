@@ -10,7 +10,7 @@ class OrderedSet:
     def __init__(self, base=()):
         self.list = []
         self.set = set()
-        self.add(*base)
+        self.extend(base)
 
     def __iter__(self):
         return iter(self.list)
@@ -55,6 +55,10 @@ class NotificationDistributor:
         pass
 
 class TellBot(basebot.Bot):
+
+    BOTNAME = 'TellBot'
+    NICKNAME = 'TellBot'
+
     def handle_command(self, cmdline, meta):
         def parse_userlist(base, it):
             for arg in it:
@@ -65,7 +69,7 @@ class TellBot(basebot.Bot):
                     return Ellipsis
                 elif arg.startswith('+@'): # Add user (long form).
                     base.extend(distr.query_users(arg[2:]))
-                elif arg.starstwith('+*'): # Add group (long form).
+                elif arg.startswith('+*'): # Add group (long form).
                     reply('Groups are NYI.')
                     return Ellipsis
                 elif arg.startswith('-@'): # Discard user.
@@ -88,7 +92,7 @@ class TellBot(basebot.Bot):
             # Parse arguments.
             recipients, text, it = OrderedSet(), None, iter(cmdline[1:])
             while 1:
-                arg = parse_userlist(it)
+                arg = parse_userlist(recipients, it)
                 if arg is None:
                     break
                 elif arg is Ellipsis:
