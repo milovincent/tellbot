@@ -3,6 +3,7 @@
 
 import sys, os, re, time
 import threading
+import sqlite3
 
 import basebot
 
@@ -41,6 +42,12 @@ class OrderedSet:
             self.discard(item)
 
 class NotificationDistributor:
+    def query_user(self, name): raise NotImplementedError
+    def query_messages(self, user): raise NotImplementedError
+    def pop_messages(self, user): raise NotImplementedError
+    def add_message(self, user, message): raise NotImplementedError
+
+class NotificationDistributorMemory(NotificationDistributor):
     def __init__(self):
         self.messages = {}
         self.lock = threading.RLock()
@@ -49,16 +56,86 @@ class NotificationDistributor:
         return basebot.normalize_nick(name)
 
     def query_messages(self, user):
+        user = basebot.normalize_nick(user)
         with self.lock:
             return self.messages.get(user, [])
 
     def pop_messages(self, user):
+        user = basebot.normalize_nick(user)
         with self.lock:
             return self.messages.pop(user, [])
 
     def add_message(self, user, message):
+        user = basebot.normalize_nick(user)
         with self.lock:
             self.messages.setdefault(user, []).append(message)
+
+class NotificationDistributorSQLite(NotificationDistributor):
+    def __init__(self, filename):
+        self.filename = filename
+        self.lock = threading.RLock()
+        self.conn = None
+        self.curs = None
+        self.init()
+
+    def __enter__(self):
+        return self.lock.__enter__()
+
+    def __exit__(self, *args):
+        try:
+            self.conn.commit()
+        finally:
+            return self.lock.__exit__()
+
+    def init(self):
+        with self.lock:
+            self.conn = sqlite3.connect(self.filename, isolation_level='',
+                                        check_same_thread=False)
+            self.curs = self.conn.cursor()
+            self.curs.execute('CREATE TABLE IF NOT EXISTS messages ('
+                                  'sender TEXT,'
+                                  'recipient TEXT,'
+                                  'text TEXT,'
+                                  'timestamp REAL'
+                              ')')
+
+    def _unwrap_messages(self, it):
+        ret = []
+        for item in it:
+            ret.append({'from': item[0], 'to': item[1],
+                        'text': item[2], 'timestamp': item[3]})
+        return ret
+    def _wrap_message(self, message):
+        return (message['from'], message['to'], message['text'],
+                message['timestamp'])
+
+    def query_user(self, name):
+        return basebot.normalize_nick(name)
+
+    def query_messages(self, user):
+        user = basebot.normalize_nick(user)
+        with self.lock:
+            self.curs.execute('SELECT * FROM message WHERE recipient = ?',
+                              (user,))
+            return self._unwrap_messages(self.curs.fetchall())
+
+    def pop_messages(self, user):
+        user = basebot.normalize_nick(user)
+        with self:
+            self.curs.execute('SELECT _rowid_, sender, text, '
+                'timestamp FROM messages WHERE recipient = ?', (user,))
+            msgs = tuple(self.curs.fetchall())
+            self.curs.executemany('DELETE FROM messages WHERE _rowid_ = ?',
+                                  (str(el[0]) for el in msgs))
+            return self._unwrap_messages(
+                (s, user, c, t) for r, s, c, t in msgs)
+
+    def add_message(self, user, message):
+        user = basebot.normalize_nick(user)
+        with self:
+            self.curs.execute('INSERT INTO messages (sender, recipient, '
+                'text, timestamp) VALUES (?, ?, ?, ?)',
+                self._wrap_message(message))
 
 class TellBot(basebot.Bot):
     BOTNAME = 'TellBot'
@@ -137,7 +214,7 @@ class TellBot(basebot.Bot):
 
             # Schedule message.
             for user in recipients:
-                distr.add_message(user, message)
+                distr.add_message(user, dict(message, to=user))
 
             # Reply.
             if recipients:
@@ -146,8 +223,29 @@ class TellBot(basebot.Bot):
                 reply('Message will be delivered to no-one.')
 
 class TellBotManager(basebot.BotManager):
+    @classmethod
+    def prepare_parser(cls, parser, config):
+        basebot.BotManager.prepare_parser(parser, config)
+        parser.add_option('--db', dest='db', metavar='<path>',
+                          help='SQLite database file for message '
+                              'persistence (deault in-memory)')
+
+    @classmethod
+    def interpret_args(cls, options, arguments, config):
+        bots, config = basebot.BotManager.interpret_args(options,
+            arguments, config)
+        for name in ('db',):
+            value = getattr(options, name)
+            if value is not None:
+                config[name] = value
+        return (bots, config)
+
     def __init__(self, **config):
         basebot.BotManager.__init__(self, **config)
-        self.distributor = NotificationDistributor()
+        self.db = config.get('db', None)
+        if self.db:
+            self.distributor = NotificationDistributorSQLite(self.db)
+        else:
+            self.distributor = NotificationDistributorMemory()
 
 if __name__ == '__main__': basebot.run_main(TellBot, mgrcls=TellBotManager)
