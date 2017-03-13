@@ -1,2 +1,3 @@
 # tellbot
-A mailer bot for euphoria.io
+
+A mailer bot for [euphoria.io](https://euphoria.io).
