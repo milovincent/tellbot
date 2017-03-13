@@ -259,8 +259,8 @@ class TellBot(basebot.Bot):
 
         # Reply with the users from a given list.
         def display_group(groupname, members, ping, comment):
-            head = 'Members of *%s%s%s' % (groupname, ' ' if comment else '',
-                                           comment)
+            head = 'Members of *%s%s%s: ' % (groupname,
+                ' ' if comment else '', comment)
             if members:
                 tr = make_mention if ping else seminormalize_nick
                 lst = ', '.join(map(tr, members))
@@ -341,7 +341,7 @@ class TellBot(basebot.Bot):
         elif cmdline[0] == '!tgroup':
             # Dismiss bad usages.
             if len(cmdline) == 1 or not cmdline[1].startswith('*'):
-                reply('Please specify a group to update.')
+                reply('Please specify a group to show or update.')
                 return
 
             # Parse arguments.
@@ -365,15 +365,15 @@ class TellBot(basebot.Bot):
                     return
 
             # Display old membership.
-            display_members(groupname, old_members, ping,
-                            '' if len(cmdline) == 2 else 'before')
+            display_group(groupname, old_members, ping,
+                          '' if len(cmdline) == 2 else 'before')
             if len(cmdline) == 2: return
 
             # Apply changes.
             distr.update_group(groupname, tuple(members))
 
             # Display new membership.
-            display_members(groupname, members, ping, 'after')
+            display_group(groupname, members, ping, 'after')
 
 class GCThread(threading.Thread):
     def __init__(self, distr):
