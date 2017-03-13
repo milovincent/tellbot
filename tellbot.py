@@ -7,6 +7,8 @@ import sqlite3
 
 import basebot
 
+REPLY_TIMEOUT = 3600
+
 def make_mention(nick):
     return '@' + re.sub(r'\s+', '', nick)
 
@@ -86,7 +88,7 @@ class NotificationDistributorMemory(NotificationDistributor):
                 msg['delivered'] = timestamp
 
     def gc(self):
-        deadline = time.time() - 3600
+        deadline = time.time() - REPLY_TIMEOUT
         with self.lock:
             for k, v in tuple(self.deliveries.items()):
                 if v['delivered'] < deadline:
@@ -175,7 +177,7 @@ class NotificationDistributorSQLite(NotificationDistributor):
                                                     msg['id']))
 
     def gc(self):
-        deadline = time.time() - 3600
+        deadline = time.time() - REPLY_TIMEOUT
         with self:
             self.curs.execute('DELETE FROM messages WHERE delivered < ?',
                               (deadline,))
@@ -286,7 +288,7 @@ class GCThread(threading.Thread):
         cont = True
         while cont:
             self.distr.gc()
-            wakeup = time.time() + 10
+            wakeup = time.time() + REPLY_TIMEOUT
             with self.cond:
                 while not self.exiting:
                     now = time.time()
