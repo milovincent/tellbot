@@ -42,8 +42,8 @@ class NotificationDistributor:
         self.messages = {}
         self.lock = threading.RLock()
 
-    def query_users(self, name):
-        return ()
+    def query_user(self, name):
+        return name
 
     def query_messages(self, user):
         pass
@@ -63,17 +63,17 @@ class TellBot(basebot.Bot):
         def parse_userlist(base, it):
             for arg in it:
                 if arg.startswith('@'): # Add user.
-                    base.extend(distr.query_users(arg[1:]))
+                    base.append(distr.query_user(arg[1:]))
                 elif arg.startswith('*'): # Add group.
                     reply('Groups are NYI.')
                     return Ellipsis
                 elif arg.startswith('+@'): # Add user (long form).
-                    base.extend(distr.query_users(arg[2:]))
+                    base.append(distr.query_user(arg[2:]))
                 elif arg.startswith('+*'): # Add group (long form).
                     reply('Groups are NYI.')
                     return Ellipsis
                 elif arg.startswith('-@'): # Discard user.
-                    base.discard_all(distr.query_users(arg[2:]))
+                    base.discard(distr.query_user(arg[2:]))
                 elif arg.startswith('-*'): # Discard group.
                     reply('Groups are NYI.')
                     return Ellipsis
