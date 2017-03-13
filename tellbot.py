@@ -46,7 +46,7 @@ class NotificationDistributor:
         self.lock = threading.RLock()
 
     def query_user(self, name):
-        return name
+        return basebot.normalize_nick(name)
 
     def query_messages(self, user):
         with self.lock:
@@ -61,7 +61,6 @@ class NotificationDistributor:
             self.messages.setdefault(user, []).append(message)
 
 class TellBot(basebot.Bot):
-
     BOTNAME = 'TellBot'
     NICKNAME = 'TellBot'
 
@@ -72,7 +71,8 @@ class TellBot(basebot.Bot):
         now = time.time()
         for m in messages:
             reply('[%s, %s ago] %s' % (make_mention(m['from']),
-                basebot.format_delta(now - m['timestamp']), m['text']))
+                basebot.format_delta(now - m['timestamp'], fractions=False),
+                m['text']))
 
     def handle_command(self, cmdline, meta):
         def parse_userlist(base, it):
@@ -117,11 +117,13 @@ class TellBot(basebot.Bot):
                         text = meta['line'][next(it).offset:]
                     except StopIteration:
                         pass
+                    break
                 elif arg.startswith('--'):
                     reply('Unknown option %s.' % arg)
                     return
                 else:
                     text = meta['line'][arg.offset:]
+                    break
             recipients = tuple(recipients)
 
             # Abort if no text.
