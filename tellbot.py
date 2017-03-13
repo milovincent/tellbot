@@ -170,7 +170,7 @@ class NotificationDistributorSQLite(NotificationDistributor):
 
     def add_delivery(self, msg, msgid, timestamp):
         with self:
-            self.curs.executemany('UPDATE messages SET delivered_to = ?, '
+            self.curs.execute('UPDATE messages SET delivered_to = ?, '
                 'delivered = ? WHERE _rowid_ = ?', (msgid, timestamp,
                                                     msg['id']))
 
@@ -185,14 +185,19 @@ class TellBot(basebot.Bot):
     NICKNAME = 'TellBot'
 
     def handle_chat(self, msg, meta):
+        def handle_delivery(reply):
+            m = seqs.pop(reply.id, None)
+            if m: distr.add_delivery(m, reply.data.id, reply.data.time)
         distr, reply = self.manager.distributor, meta['reply']
         user = distr.query_user(msg['sender']['name'])
         messages = distr.pop_messages(user)
         now = time.time()
+        seqs = {}
         for m in messages:
-            reply('[%s, %s ago] %s' % (make_mention(m['from']),
+            seq = reply('[%s, %s ago] %s' % (make_mention(m['from']),
                 basebot.format_delta(now - m['timestamp'], fractions=False),
-                m['text']))
+                m['text']), handle_delivery)
+            seqs[seq] = m
 
     def handle_command(self, cmdline, meta):
         def parse_userlist(base, it):
