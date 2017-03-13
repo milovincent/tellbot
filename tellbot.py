@@ -104,9 +104,8 @@ class NotificationDistributorMemory(NotificationDistributor):
 
     def add_delivery(self, msg, msgid, timestamp):
         with self.lock:
-            for msg, msgid, timestamp in dels:
-                msg['delivered_to'] = msgid
-                msg['delivered'] = timestamp
+            msg['delivered_to'] = msgid
+            msg['delivered'] = timestamp
 
     def gc(self):
         deadline = time.time() - REPLY_TIMEOUT
@@ -233,7 +232,7 @@ class TellBot(basebot.Bot):
             if m: distr.add_delivery(m, reply.data.id, reply.data.time)
 
         distr, reply = self.manager.distributor, meta['reply']
-        user = distr.query_user(msg['sender']['name'])
+        user = distr.query_user(msg['sender']['name'])[0]
         messages, now, seqs = distr.pop_messages(user), time.time(), {}
 
         # Deliver messages.
