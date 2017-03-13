@@ -5,7 +5,10 @@ import sys, os
 
 import basebot
 
-def main():
+class TellBot(basebot.Bot):
     pass
 
-if __name__ == '__main__': main()
+class TellBotManager(basebot.BotManager):
+    pass
+
+if __name__ == '__main__': basebot.run_main(TellBot, mgrcls=TellBotManager)
