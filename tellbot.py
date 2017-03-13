@@ -46,10 +46,14 @@ class NotificationDistributor:
     def query_messages(self, user): raise NotImplementedError
     def pop_messages(self, user): raise NotImplementedError
     def add_message(self, user, message): raise NotImplementedError
+    def query_delivery(self, msgid): raise NotImplementedError
+    def add_delivery(self, msg, msgid, timestamp): raise NotImplementedError
+    def gc(self): raise NotImplementedError
 
 class NotificationDistributorMemory(NotificationDistributor):
     def __init__(self):
         self.messages = {}
+        self.deliveries = {}
         self.lock = threading.RLock()
 
     def query_user(self, name):
@@ -67,8 +71,26 @@ class NotificationDistributorMemory(NotificationDistributor):
 
     def add_message(self, user, message):
         user = basebot.normalize_nick(user)
+        message['id'] = id(message)
         with self.lock:
             self.messages.setdefault(user, []).append(message)
+
+    def query_delivery(self, msgid):
+        with self.lock:
+            return self.deliveries[msgid]
+
+    def add_delivery(self, msg, msgid, timestamp):
+        with self.lock:
+            for msg, msgid, timestamp in dels:
+                msg['delivered_to'] = msgid
+                msg['delivered'] = timestamp
+
+    def gc(self):
+        deadline = time.time() - 3600
+        with self.lock:
+            for k, v in tuple(self.deliveries.items()):
+                if v['delivered'] < deadline:
+                    del self.deliveries[k]
 
 class NotificationDistributorSQLite(NotificationDistributor):
     def __init__(self, filename):
@@ -96,18 +118,21 @@ class NotificationDistributorSQLite(NotificationDistributor):
                                   'sender TEXT,'
                                   'recipient TEXT,'
                                   'text TEXT,'
-                                  'timestamp REAL'
+                                  'timestamp REAL,'
+                                  'delivered_to TEXT UNIQUE,'
+                                  'delivered REAL'
                               ')')
 
+    def _unwrap_message(self, item):
+        return {'id': item[0], 'from': item[1], 'to': item[2],
+                'text': item[3], 'timestamp': item[4],
+                'delivered_to': item[5], 'delivered': item[6]}
     def _unwrap_messages(self, it):
-        ret = []
-        for item in it:
-            ret.append({'from': item[0], 'to': item[1],
-                        'text': item[2], 'timestamp': item[3]})
-        return ret
+        return list(map(self._unwrap_message, it))
     def _wrap_message(self, message):
-        return (message['from'], message['to'], message['text'],
-                message['timestamp'])
+        return (message.get('id'), message['from'], message['to'],
+                message['text'], message['timestamp'],
+                message.get('delivered_to'), message.get('delivered'))
 
     def query_user(self, name):
         return basebot.normalize_nick(name)
@@ -115,28 +140,45 @@ class NotificationDistributorSQLite(NotificationDistributor):
     def query_messages(self, user):
         user = basebot.normalize_nick(user)
         with self.lock:
-            self.curs.execute('SELECT * FROM message WHERE recipient = ? '
-                'ORDER BY timestamp', (user,))
+            self.curs.execute('SELECT _rowid_, * FROM messages WHERE recipient = ? '
+                'AND delivered_to IS NULL ORDER BY timestamp', (user,))
             return self._unwrap_messages(self.curs.fetchall())
 
     def pop_messages(self, user):
         user = basebot.normalize_nick(user)
         with self:
-            self.curs.execute('SELECT _rowid_, sender, text, '
-                'timestamp FROM messages WHERE recipient = ? '
+            self.curs.execute('SELECT _rowid_, sender, text, timestamp '
+                'FROM messages WHERE recipient = ? AND delivered_to IS NULL '
                 'ORDER BY timestamp', (user,))
             msgs = tuple(self.curs.fetchall())
-            self.curs.executemany('DELETE FROM messages WHERE _rowid_ = ?',
-                                  (str(el[0]) for el in msgs))
-            return self._unwrap_messages(
-                (s, user, c, t) for r, s, c, t in msgs)
+            return self._unwrap_messages((i, s, user, c, t, None, None)
+                                         for i, s, c, t in msgs)
 
     def add_message(self, user, message):
         user = basebot.normalize_nick(user)
         with self:
-            self.curs.execute('INSERT INTO messages (sender, recipient, '
-                'text, timestamp) VALUES (?, ?, ?, ?)',
-                self._wrap_message(message))
+            self.curs.execute('INSERT INTO messages '
+                'VALUES (?, ?, ?, ?, ?, ?)', self._wrap_message(message)[1:])
+
+    def query_delivery(self, msgid):
+        with self.lock:
+            self.curs.execute('SELECT * FROM messages '
+                'WHERE delivered_to = ?', (msgid,))
+            res = self.curs.fetch()
+            if res is None: return None
+            return self._unwrap_message(res)
+
+    def add_delivery(self, msg, msgid, timestamp):
+        with self:
+            self.curs.executemany('UPDATE messages SET delivered_to = ?, '
+                'delivered = ? WHERE _rowid_ = ?', (msgid, timestamp,
+                                                    msg['id']))
+
+    def gc(self):
+        deadline = time.time() - 3600
+        with self:
+            self.curs.execute('DELETE FROM messages WHERE delivered < ?',
+                              (deadline,))
 
 class TellBot(basebot.Bot):
     BOTNAME = 'TellBot'
@@ -223,6 +265,31 @@ class TellBot(basebot.Bot):
             else:
                 reply('Message will be delivered to no-one.')
 
+class GCThread(threading.Thread):
+    def __init__(self, distr):
+        threading.Thread.__init__(self)
+        self.distr = distr
+        self.exiting = False
+        self.cond = threading.Condition()
+
+    def shutdown(self):
+        with self.cond:
+            self.exiting = True
+            self.cond.notifyAll()
+
+    def run(self):
+        cont = True
+        while cont:
+            self.distr.gc()
+            wakeup = time.time() + 10
+            with self.cond:
+                while not self.exiting:
+                    now = time.time()
+                    if now >= wakeup: break
+                    self.cond.wait(wakeup - now)
+                else:
+                    break
+
 class TellBotManager(basebot.BotManager):
     @classmethod
     def prepare_parser(cls, parser, config):
@@ -248,5 +315,6 @@ class TellBotManager(basebot.BotManager):
             self.distributor = NotificationDistributorSQLite(self.db)
         else:
             self.distributor = NotificationDistributorMemory()
+        self.children.append(GCThread(self.distributor))
 
 if __name__ == '__main__': basebot.run_main(TellBot, mgrcls=TellBotManager)
