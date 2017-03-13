@@ -230,7 +230,8 @@ class TellBot(basebot.Bot):
                     return arg
 
         basebot.Bot.handle_command(self, cmdline, meta)
-        distr, reply = self.manager.distributor, meta['reply']
+        distr = self.manager.distributor
+        sender, reply = meta['msg']['sender'], meta['reply']
 
         if cmdline[0] == '!tell':
             # Parse arguments.
@@ -261,7 +262,7 @@ class TellBot(basebot.Bot):
                 return
 
             # Collect metadata.
-            message = {'text': text, 'from': meta['msg']['sender']['name'],
+            message = {'text': text, 'from': sender,
                        'timestamp': time.time()}
 
             # Schedule message.
@@ -273,6 +274,23 @@ class TellBot(basebot.Bot):
                 reply('Message will be delivered.')
             else:
                 reply('Message will be delivered to no-one.')
+
+        elif cmdline[0] == '!reply':
+            # Determine recipient.
+            cause = distr.query_delivery(meta['msg']['id'])
+            if cause is None:
+                reply('Message not recognized.')
+            recipient = distr.query_user(cause['from'])
+
+            # Abort if no text.
+            if len(cmdline) == 1:
+                reply('Nothing will be delivered.')
+                return
+
+            # Schedule message.
+            text = meta['msg']['line'][cmdline[1].offset:]
+            distr.add_message(cause['from'], {'text': text, 'from': sender,
+                'timestamp': time.time(), 'to': recipient})
 
 class GCThread(threading.Thread):
     def __init__(self, distr):
