@@ -49,13 +49,16 @@ class NotificationDistributor:
         return name
 
     def query_messages(self, user):
-        pass
+        with self.lock:
+            return self.messages.get(user, [])
 
     def pop_messages(self, user):
-        pass
+        with self.lock:
+            return self.messages.pop(user, [])
 
     def add_message(self, user, message):
-        pass
+        with self.lock:
+            self.messages.setdefault(user, []).append(message)
 
 class TellBot(basebot.Bot):
 
