@@ -560,7 +560,7 @@ class TellBotManager(basebot.BotManager):
         basebot.BotManager.prepare_parser(parser, config)
         parser.add_option('--db', dest='db', metavar='<path>',
                           help='SQLite database file for message '
-                              'persistence (deault in-memory)')
+                              'persistence (default in-memory)')
 
     @classmethod
     def interpret_args(cls, options, arguments, config):
