@@ -247,11 +247,9 @@ class TellBot(basebot.Bot):
         def format_reason(src):
             if src.startswith('<re> '):
                 res = format_reason(src[5:])
-                return ' replying' + res if res else ''
-            elif src:
-                return ' to ' + src
+                return ' replying' + res
             else:
-                return ''
+                return ' to ' + src
 
         # Add a delivery notice.
         def handle_delivery(reply):
@@ -430,6 +428,43 @@ class TellBot(basebot.Bot):
 
             # Inform user.
             reply('Message will be delivered to %s.' % recname)
+
+        # Reply to a group.
+        elif cmdline[0] == '!reply-all':
+            # Determine recipient.
+            if meta['msg']['parent'] is None:
+                reply('Nothing to reply to.')
+                return
+            cause = distr.query_delivery(meta['msg']['parent'])
+            if cause is None:
+                reply('Message not recognized.')
+                return
+            reason = cause['reason']
+            if reason.startswith('<re> '): reason = reason[5:]
+
+            # Determine group members.
+            if reason.startswith('@'):
+                groups = {reason: [distr.query_user(reason[1:])]}
+            else:
+                groups = {reason: distr.query_group(reason[1:])}
+            recipients = OrderedSet(groups[reason],
+                                    key=operator.itemgetter(0))
+
+            # Abort if no text.
+            reclist, reasons = format_users(recipients, groups)
+            if len(cmdline) == 1:
+                reply('Nothing will be delivered to %s.' % reclist)
+                return
+
+            # Schedule messages.
+            text = meta['line'][cmdline[1].offset:]
+            base = {'text': text, 'from': sender, 'timestamp': time.time(),
+                    'reason': '<re> ' + reason}
+            for user, nick in recipients:
+                distr.add_message(user, dict(base))
+
+            # Inform user.
+            reply('Message will be delivered to %s.' % reclist)
 
         # Update a group.
         elif cmdline[0] == '!tgroup':
