@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: ascii -*-
 
-import sys, os, re, time, operator
+import sys, os, re, time, operator, collections
 import threading
 import sqlite3
 
@@ -13,6 +13,15 @@ def seminormalize_nick(nick):
     return re.sub(r'\s+', '', nick)
 def make_mention(nick):
     return '@' + re.sub(r'\s+', '', nick)
+
+def format_list(l, fallback=None):
+    l = tuple(l)
+    if len(l) == 0:
+        return fallback
+    elif len(l) <= 2:
+        return ' and '.join(l)
+    else:
+        return ', '.join(l[:-1]) + ', and ' + l[-1]
 
 class OrderedSet:
     def __init__(self, base=(), key=lambda x: x):
@@ -26,8 +35,17 @@ class OrderedSet:
     def __nonzero__(self):
         return bool(self.list)
 
+    def __len__(self):
+        return len(self.list)
+
+    def __contains__(self, item):
+        return self.key(item) in self.set
+
     def __iter__(self):
         return iter(self.list)
+
+    def copy(self):
+        return self.__class__(self, key=self.key)
 
     def clear(self):
         self.list[:] = ()
@@ -244,7 +262,7 @@ class TellBot(basebot.Bot):
 
     def handle_command(self, cmdline, meta):
         # Common part of the argument parsers.
-        def parse_userlist(base, it, get_group=False):
+        def parse_userlist(base, groups, it, get_group=False):
             def abort():
                 reply('Please specify a group first.')
                 return Ellipsis, count
@@ -252,19 +270,27 @@ class TellBot(basebot.Bot):
             for arg in it:
                 if arg.startswith('@'): # Add user.
                     if get_group: return abort()
-                    base.append(distr.query_user(arg[1:]))
+                    u = distr.query_user(arg[1:])
+                    base.append(u)
+                    groups[arg] = [u]
                     count += 1
                 elif arg.startswith('*'): # Add group.
                     if get_group: return arg, count
-                    base.extend(distr.query_group(arg[1:]))
+                    g = distr.query_group(arg[1:])
+                    base.extend(g)
+                    groups[arg] = g
                     count += 1
                 elif arg.startswith('+@'): # Add user (long form).
                     if get_group: return abort()
-                    base.append(distr.query_user(arg[2:]))
+                    u = distr.query_user(arg[2:])
+                    base.append(u)
+                    groups[arg[1:]] = [u]
                     count += 1
                 elif arg.startswith('+*'): # Add group (long form).
                     if get_group: return abort()
-                    base.extend(distr.query_group(arg[2:]))
+                    g = distr.query_group(arg[2:])
+                    base.extend(g)
+                    groups[arg[1:]] = g
                     count += 1
                 elif arg.startswith('-@'): # Discard user.
                     if get_group: return abort()
@@ -283,15 +309,46 @@ class TellBot(basebot.Bot):
                     return arg, count
             return None, count
 
+        # Nickname formatting for output.
+        def format_nick(item, ping):
+            nnick = basebot.normalize_nick(item[1])
+            print ((item, nnick, basebot.normalize_nick(sender),
+                    basebot.normalize_nick(self.nickname)))
+            if nnick == basebot.normalize_nick(sender):
+                return 'yourself'
+            elif nnick == basebot.normalize_nick(self.nickname):
+                return 'myself'
+            return (make_mention if ping else seminormalize_nick)(item[1])
+
+        # A string representation of a list of users; arranged by group.
+        def format_users(users, groups):
+            if not users: return 'no-one'
+            tr = lambda x: format_nick(x, True)
+            users, seen, segments, add = users.copy(), set(), [], False
+            for n, c in groups.items():
+                nc = [i for i in c if i[0] not in seen]
+                if n.startswith('@'):
+                    if nc:
+                        segments.extend(map(tr, nc))
+                    else:
+                        add = True
+                else:
+                    names = [tr(i) for i in nc]
+                    if len(nc) == 0:
+                        names.append('-already covered-')
+                    elif len(nc) != len(c):
+                        names.append('-already covered-')
+                    segments.append('%s (%s)' % (n, format_list(names)))
+                seen.update(i[0] for i in nc)
+            if add: segments.append('-already covered-')
+            return format_list(segments)
+
         # Reply with the users from a given list.
         def display_group(groupname, members, ping, comment):
             head = 'Members of *%s%s%s: ' % (groupname,
                 ' ' if comment else '', comment)
-            if members:
-                tr = make_mention if ping else seminormalize_nick
-                lst = ', '.join(tr(el[1]) for el in members)
-            else:
-                lst = '-none-'
+            tr = lambda x: format_nick(x, ping)
+            lst = format_list(map(tr, members), '-none-')
             reply(head + lst)
 
         basebot.Bot.handle_command(self, cmdline, meta)
@@ -301,10 +358,11 @@ class TellBot(basebot.Bot):
         # Send a message.
         if cmdline[0] == '!tell':
             # Parse arguments.
-            recipients, text = OrderedSet(key=operator.itemgetter(0)), None
+            recipients = OrderedSet(key=operator.itemgetter(0))
+            groups, text = collections.OrderedDict(), None
             it = iter(cmdline[1:])
             while 1:
-                arg, count = parse_userlist(recipients, it)
+                arg, count = parse_userlist(recipients, groups, it)
                 if arg is None:
                     break
                 elif arg is Ellipsis:
@@ -321,23 +379,23 @@ class TellBot(basebot.Bot):
                 else:
                     text = meta['line'][arg.offset:]
                     break
-            recipients = tuple(basebot.normalize_nick(el[0]) for el in recipients)
+            eff_recipients = tuple(basebot.normalize_nick(el[0])
+                                   for el in recipients)
 
             # Abort if no text.
             if text is None:
-                reply('Nothing will be delivered.')
+                reply('Nothing will be delivered to %s.' %
+                      format_users(recipients, groups))
                 return
 
             # Schedule messages.
             base = {'text': text, 'from': sender, 'timestamp': time.time()}
-            for user in recipients:
+            for user in eff_recipients:
                 distr.add_message(user, dict(base, to=user))
 
             # Reply.
-            if recipients:
-                reply('Message will be delivered.')
-            else:
-                reply('Message will be delivered to no-one.')
+            reply('Message will be delivered to %s.' %
+                  format_users(recipients, groups))
 
         # Reply to a freshly delivered message.
         elif cmdline[0] == '!reply':
@@ -367,10 +425,11 @@ class TellBot(basebot.Bot):
         # Update a group.
         elif cmdline[0] == '!tgroup':
             # Parse arguments.
-            groupname, members, ping = None, None, False
+            groupname, members, groups, ping = None, None, None, False
             it, count = iter(cmdline[1:]), 0
             while 1:
-                arg, cnt = parse_userlist(members, it, (groupname is None))
+                arg, cnt = parse_userlist(members, groups, it,
+                                          (groupname is None))
                 count += cnt
                 if arg is None:
                     break
@@ -379,7 +438,9 @@ class TellBot(basebot.Bot):
                 elif arg.startswith('*'):
                     groupname = arg[1:]
                     old_members = distr.query_group(groupname)
-                    members = OrderedSet(old_members, key=operator.itemgetter(0))
+                    members = OrderedSet(old_members,
+                                         key=operator.itemgetter(0))
+                    groups = {}
                 elif arg == '--ping':
                     ping = True
                 elif arg.startswith('--') and arg != '--':
