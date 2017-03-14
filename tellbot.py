@@ -101,18 +101,16 @@ class NotificationDistributorMemory(NotificationDistributor):
             self.groups[name] = members
 
     def query_messages(self, user):
-        user = basebot.normalize_nick(user)
         with self.lock:
             return self.messages.get(user, [])
 
     def pop_messages(self, user):
-        user = basebot.normalize_nick(user)
         with self.lock:
             return self.messages.pop(user, [])
 
     def add_message(self, user, message):
-        user = basebot.normalize_nick(user)
         message['id'] = id(message)
+        message['to'] = user
         with self.lock:
             self.messages.setdefault(user, []).append(message)
 
@@ -198,7 +196,6 @@ class NotificationDistributorSQLite(NotificationDistributor):
                                   ((name, m, n) for m, n in members))
 
     def query_messages(self, user):
-        user = basebot.normalize_nick(user)
         with self.lock:
             self.curs.execute('SELECT _rowid_, * FROM messages '
                 'WHERE recipient = ? AND delivered_to IS NULL '
@@ -206,7 +203,6 @@ class NotificationDistributorSQLite(NotificationDistributor):
             return self._unwrap_messages(self.curs.fetchall())
 
     def pop_messages(self, user):
-        user = basebot.normalize_nick(user)
         with self:
             self.curs.execute('SELECT _rowid_, sender, reason, text, '
                 'timestamp FROM messages WHERE recipient = ? '
@@ -216,7 +212,7 @@ class NotificationDistributorSQLite(NotificationDistributor):
                                          for i, s, w, c, t in msgs)
 
     def add_message(self, user, message):
-        user = basebot.normalize_nick(user)
+        message['to'] = user
         with self:
             self.curs.execute('INSERT INTO messages '
                 'VALUES (?, ?, ?, ?, ?, ?, ?)',
@@ -394,7 +390,6 @@ class TellBot(basebot.Bot):
                 else:
                     text = meta['line'][arg.offset:]
                     break
-            eff_recipients = tuple(el[0] for el in recipients)
 
             # Abort if no text.
             reclist, reasons = format_users(recipients, groups)
@@ -404,9 +399,8 @@ class TellBot(basebot.Bot):
 
             # Schedule messages.
             base = {'text': text, 'from': sender, 'timestamp': time.time()}
-            for user in eff_recipients:
-                distr.add_message(user, dict(base, to=user,
-                                             reason=reasons[user]))
+            for user, nick in recipients:
+                distr.add_message(user, dict(base, reason=reasons[user]))
 
             # Reply.
             reply('Message will be delivered to %s.' % reclist)
@@ -422,7 +416,7 @@ class TellBot(basebot.Bot):
                 reply('Message not recognized.')
                 return
             recipient = distr.query_user(cause['from'])
-            recname = basebot.format_mention(recipient[1])
+            recname = format_nick(recipient, True)
 
             # Abort if no text.
             if len(cmdline) == 1:
@@ -432,8 +426,7 @@ class TellBot(basebot.Bot):
             # Schedule message.
             text = meta['line'][cmdline[1].offset:]
             distr.add_message(recipient[0], {'text': text, 'from': sender,
-                'timestamp': time.time(), 'to': recipient[0],
-                'reason': '<re> ' + recname})
+                'timestamp': time.time(), 'reason': '<re> ' + recname})
 
             # Inform user.
             reply('Message will be delivered to %s.' % recname)
