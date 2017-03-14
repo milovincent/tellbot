@@ -242,12 +242,26 @@ class TellBot(basebot.Bot):
     BOTNAME = 'TellBot'
     NICKNAME = 'TellBot'
 
+    def _format_nick(self, nick, ping=True, subject=None):
+        nnick = basebot.normalize_nick(nick)
+        if subject and nnick == basebot.normalize_nick(subject):
+            return 'yourself'
+        elif nnick == basebot.normalize_nick(self.nickname):
+            return 'myself'
+        return (make_mention if ping else seminormalize_nick)(nick)
+
     def handle_chat(self, msg, meta):
-        # Format a delivery reason
+        # Format a nickname.
+        def format_nick(name):
+            return self._format_nick(name, True, user[1])
+
+        # Format a delivery reason.
         def format_reason(src):
             if src.startswith('<re> '):
                 res = format_reason(src[5:])
                 return ' replying' + res
+            elif src.startswith('@'):
+                return ' to ' + format_nick(src[1:])
             else:
                 return ' to ' + src
 
@@ -257,12 +271,12 @@ class TellBot(basebot.Bot):
             if m: distr.add_delivery(m, reply.data.id, reply.data.time)
 
         distr, reply = self.manager.distributor, meta['reply']
-        user = distr.query_user(msg['sender']['name'])[0]
-        messages, now, seqs = distr.pop_messages(user), time.time(), {}
+        user = distr.query_user(msg['sender']['name'])
+        messages, now, seqs = distr.pop_messages(user[0]), time.time(), {}
 
         # Deliver messages.
         for m in messages:
-            seq = reply('[From %s%s, %s ago] %s' % (make_mention(m['from']),
+            seq = reply('[From %s%s, %s ago] %s' % (format_nick(m['from']),
                 format_reason(m['reason']), basebot.format_delta(now -
                 m['timestamp'], fractions=False), m['text']),
                 handle_delivery)
@@ -319,12 +333,7 @@ class TellBot(basebot.Bot):
 
         # Nickname formatting for output.
         def format_nick(item, ping):
-            nnick = basebot.normalize_nick(item[1])
-            if nnick == basebot.normalize_nick(sender):
-                return 'yourself'
-            elif nnick == basebot.normalize_nick(self.nickname):
-                return 'myself'
-            return (make_mention if ping else seminormalize_nick)(item[1])
+            return self._format_nick(item[1], ping, sender)
 
         # A string representation of a list of users; arranged by group.
         def format_users(users, groups):
