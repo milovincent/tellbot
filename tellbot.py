@@ -157,6 +157,7 @@ class NotificationDistributorSQLite(NotificationDistributor):
             self.curs.execute('CREATE TABLE IF NOT EXISTS messages ('
                                   'sender TEXT,'
                                   'recipient TEXT,'
+                                  'reason TEXT,'
                                   'text TEXT,'
                                   'timestamp REAL,'
                                   'delivered_to TEXT UNIQUE,'
@@ -171,13 +172,13 @@ class NotificationDistributorSQLite(NotificationDistributor):
 
     def _unwrap_message(self, item):
         return {'id': item[0], 'from': item[1], 'to': item[2],
-                'text': item[3], 'timestamp': item[4],
-                'delivered_to': item[5], 'delivered': item[6]}
+                'reason': item[3], 'text': item[4], 'timestamp': item[5],
+                'delivered_to': item[6], 'delivered': item[7]}
     def _unwrap_messages(self, it):
         return list(map(self._unwrap_message, it))
     def _wrap_message(self, message):
         return (message.get('id'), message['from'], message['to'],
-                message['text'], message['timestamp'],
+                message['reason'], message['text'], message['timestamp'],
                 message.get('delivered_to'), message.get('delivered'))
 
     def query_user(self, name):
@@ -199,25 +200,27 @@ class NotificationDistributorSQLite(NotificationDistributor):
     def query_messages(self, user):
         user = basebot.normalize_nick(user)
         with self.lock:
-            self.curs.execute('SELECT _rowid_, * FROM messages WHERE recipient = ? '
-                'AND delivered_to IS NULL ORDER BY timestamp', (user,))
+            self.curs.execute('SELECT _rowid_, * FROM messages '
+                'WHERE recipient = ? AND delivered_to IS NULL '
+                'ORDER BY timestamp', (user,))
             return self._unwrap_messages(self.curs.fetchall())
 
     def pop_messages(self, user):
         user = basebot.normalize_nick(user)
         with self:
-            self.curs.execute('SELECT _rowid_, sender, text, timestamp '
-                'FROM messages WHERE recipient = ? AND delivered_to IS NULL '
-                'ORDER BY timestamp', (user,))
+            self.curs.execute('SELECT _rowid_, sender, reason, text, '
+                'timestamp FROM messages WHERE recipient = ? '
+                'AND delivered_to IS NULL ORDER BY timestamp', (user,))
             msgs = tuple(self.curs.fetchall())
-            return self._unwrap_messages((i, s, user, c, t, None, None)
-                                         for i, s, c, t in msgs)
+            return self._unwrap_messages((i, s, user, w, c, t, None, None)
+                                         for i, s, w, c, t in msgs)
 
     def add_message(self, user, message):
         user = basebot.normalize_nick(user)
         with self:
             self.curs.execute('INSERT INTO messages '
-                'VALUES (?, ?, ?, ?, ?, ?)', self._wrap_message(message)[1:])
+                'VALUES (?, ?, ?, ?, ?, ?, ?)',
+                self._wrap_message(message)[1:])
 
     def query_delivery(self, msgid):
         with self.lock:
@@ -244,6 +247,16 @@ class TellBot(basebot.Bot):
     NICKNAME = 'TellBot'
 
     def handle_chat(self, msg, meta):
+        # Format a delivery reason
+        def format_reason(src):
+            if src.startswith('<re> '):
+                res = format_reason(src[5:])
+                return ' replying' + res if res else ''
+            elif src:
+                return ' to ' + src
+            else:
+                return ''
+
         # Add a delivery notice.
         def handle_delivery(reply):
             m = seqs.pop(reply.id, None)
@@ -255,9 +268,10 @@ class TellBot(basebot.Bot):
 
         # Deliver messages.
         for m in messages:
-            seq = reply('[%s, %s ago] %s' % (make_mention(m['from']),
-                basebot.format_delta(now - m['timestamp'], fractions=False),
-                m['text']), handle_delivery)
+            seq = reply('[From %s%s, %s ago] %s' % (make_mention(m['from']),
+                format_reason(m['reason']), basebot.format_delta(now -
+                m['timestamp'], fractions=False), m['text']),
+                handle_delivery)
             seqs[seq] = m
 
     def handle_command(self, cmdline, meta):
@@ -320,11 +334,14 @@ class TellBot(basebot.Bot):
 
         # A string representation of a list of users; arranged by group.
         def format_users(users, groups):
-            if not users: return 'no-one'
+            if not users: return ('no-one', {})
             tr = lambda x: format_nick(x, True)
             users, seen, segments, add = users.copy(), set(), [], False
+            reasons = {}
             for n, c in groups.items():
                 nc = [i for i in c if i[0] not in seen]
+                for normnick, nick in nc:
+                    reasons[normnick] = n
                 if n.startswith('@'):
                     if nc:
                         segments.extend(map(tr, nc))
@@ -339,7 +356,7 @@ class TellBot(basebot.Bot):
                     segments.append('%s (%s)' % (n, format_list(names)))
                 seen.update(i[0] for i in nc)
             if add: segments.append('-already covered-')
-            return format_list(segments)
+            return (format_list(segments), reasons)
 
         # Reply with the users from a given list.
         def display_group(groupname, members, ping, comment):
@@ -380,19 +397,19 @@ class TellBot(basebot.Bot):
             eff_recipients = tuple(el[0] for el in recipients)
 
             # Abort if no text.
+            reclist, reasons = format_users(recipients, groups)
             if text is None:
-                reply('Nothing will be delivered to %s.' %
-                      format_users(recipients, groups))
+                reply('Nothing will be delivered to %s.' % reclist)
                 return
 
             # Schedule messages.
             base = {'text': text, 'from': sender, 'timestamp': time.time()}
             for user in eff_recipients:
-                distr.add_message(user, dict(base, to=user))
+                distr.add_message(user, dict(base, to=user,
+                                             reason=reasons[user]))
 
             # Reply.
-            reply('Message will be delivered to %s.' %
-                  format_users(recipients, groups))
+            reply('Message will be delivered to %s.' % reclist)
 
         # Reply to a freshly delivered message.
         elif cmdline[0] == '!reply':
@@ -413,8 +430,11 @@ class TellBot(basebot.Bot):
 
             # Schedule message.
             text = meta['line'][cmdline[1].offset:]
+            reason = cause['reason']
+            if reason.startswith('<re> '): reason = reason[5:]
             distr.add_message(cause['from'], {'text': text, 'from': sender,
-                'timestamp': time.time(), 'to': recipient[0]})
+                'timestamp': time.time(), 'to': recipient[0],
+                'reason': '<re> ' + reason})
 
             # Inform user.
             reply('Message will be delivered.')
