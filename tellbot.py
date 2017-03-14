@@ -312,8 +312,6 @@ class TellBot(basebot.Bot):
         # Nickname formatting for output.
         def format_nick(item, ping):
             nnick = basebot.normalize_nick(item[1])
-            print ((item, nnick, basebot.normalize_nick(sender),
-                    basebot.normalize_nick(self.nickname)))
             if nnick == basebot.normalize_nick(sender):
                 return 'yourself'
             elif nnick == basebot.normalize_nick(self.nickname):
@@ -379,8 +377,7 @@ class TellBot(basebot.Bot):
                 else:
                     text = meta['line'][arg.offset:]
                     break
-            eff_recipients = tuple(basebot.normalize_nick(el[0])
-                                   for el in recipients)
+            eff_recipients = tuple(el[0] for el in recipients)
 
             # Abort if no text.
             if text is None:
@@ -417,7 +414,7 @@ class TellBot(basebot.Bot):
             # Schedule message.
             text = meta['line'][cmdline[1].offset:]
             distr.add_message(cause['from'], {'text': text, 'from': sender,
-                'timestamp': time.time(), 'to': recipient})
+                'timestamp': time.time(), 'to': recipient[0]})
 
             # Inform user.
             reply('Message will be delivered.')
