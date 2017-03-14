@@ -333,7 +333,7 @@ class TellBot(basebot.Bot):
 
         # Nickname formatting for output.
         def format_nick(item, ping):
-            return self._format_nick(item[1], ping, sender)
+            return self._format_nick(item[1], ping, sender[1])
 
         # A string representation of a list of users; arranged by group.
         def format_users(users, groups):
