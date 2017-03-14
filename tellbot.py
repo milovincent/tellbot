@@ -371,7 +371,8 @@ class TellBot(basebot.Bot):
 
         basebot.Bot.handle_command(self, cmdline, meta)
         distr = self.manager.distributor
-        sender, reply = meta['msg']['sender']['name'], meta['reply']
+        sender = distr.query_user(meta['msg']['sender']['name'])
+        reply = meta['reply']
 
         # Send a message.
         if cmdline[0] == '!tell':
@@ -405,12 +406,18 @@ class TellBot(basebot.Bot):
                 return
 
             # Schedule messages.
-            base = {'text': text, 'from': sender, 'timestamp': time.time()}
+            base = {'text': text, 'from': sender[1],
+                    'timestamp': time.time()}
+            self_remark = False
             for user, nick in recipients:
+                if user == sender[0]:
+                    self_remark = True
+                    continue
                 distr.add_message(user, dict(base, reason=reasons[user]))
 
             # Reply.
             reply('Message will be delivered to %s.' % reclist)
+            if self_remark: reply('Delivery to yourself cancelled.')
 
         # Reply to a freshly delivered message.
         elif cmdline[0] == '!reply':
@@ -432,7 +439,7 @@ class TellBot(basebot.Bot):
 
             # Schedule message.
             text = meta['line'][cmdline[1].offset:]
-            distr.add_message(recipient[0], {'text': text, 'from': sender,
+            distr.add_message(recipient[0], {'text': text, 'from': sender[1],
                 'timestamp': time.time(), 'reason': '<re> ' + recname})
 
             # Inform user.
@@ -467,13 +474,18 @@ class TellBot(basebot.Bot):
 
             # Schedule messages.
             text = meta['line'][cmdline[1].offset:]
-            base = {'text': text, 'from': sender, 'timestamp': time.time(),
-                    'reason': '<re> ' + reason}
+            base = {'text': text, 'from': sender[1],
+                    'timestamp': time.time(), 'reason': '<re> ' + reason}
+            self_remark = False
             for user, nick in recipients:
+                if user == sender[0]:
+                    self_remark = True
+                    continue
                 distr.add_message(user, dict(base))
 
             # Inform user.
             reply('Message will be delivered to %s.' % reclist)
+            if self_remark: reply('Delivery to yourself cancelled.')
 
         # Update a group.
         elif cmdline[0] == '!tgroup':
