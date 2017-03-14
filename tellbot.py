@@ -422,22 +422,21 @@ class TellBot(basebot.Bot):
                 reply('Message not recognized.')
                 return
             recipient = distr.query_user(cause['from'])
+            recname = basebot.format_mention(recipient[1])
 
             # Abort if no text.
             if len(cmdline) == 1:
-                reply('Nothing will be delivered.')
+                reply('Nothing will be delivered to %s.' % recname)
                 return
 
             # Schedule message.
             text = meta['line'][cmdline[1].offset:]
-            reason = cause['reason']
-            if reason.startswith('<re> '): reason = reason[5:]
-            distr.add_message(cause['from'], {'text': text, 'from': sender,
+            distr.add_message(recipient[0], {'text': text, 'from': sender,
                 'timestamp': time.time(), 'to': recipient[0],
-                'reason': '<re> ' + reason})
+                'reason': '<re> ' + recname})
 
             # Inform user.
-            reply('Message will be delivered.')
+            reply('Message will be delivered to %s.' % recname)
 
         # Update a group.
         elif cmdline[0] == '!tgroup':
