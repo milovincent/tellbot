@@ -218,7 +218,7 @@ class NotificationDistributorSQLite(NotificationDistributor):
 
     def list_groups(self):
         with self.lock:
-            self.curs.execute('SELECT groupname FROM groups')
+            self.curs.execute('SELECT DISTINCT groupname FROM groups')
             return list(i[0] for i in self.curs.fetchall())
 
     def query_group(self, name):
