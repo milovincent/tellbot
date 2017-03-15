@@ -73,6 +73,8 @@ class OrderedSet:
 
 class NotificationDistributor:
     def query_user(self, name): raise NotImplementedError
+    def query_seen(self, user): raise NotImplementedError
+    def update_seen(self, user, name, time): raise NotImplementedError
     def query_group(self, name): raise NotImplementedError
     def update_group(self, name, members): raise NotImplementedError
     def query_messages(self, user): raise NotImplementedError
@@ -84,13 +86,22 @@ class NotificationDistributor:
 
 class NotificationDistributorMemory(NotificationDistributor):
     def __init__(self):
-        self.groups = {}
+        self.last_seen = {}
         self.messages = {}
         self.deliveries = {}
+        self.groups = {}
         self.lock = threading.RLock()
 
     def query_user(self, name):
         return (basebot.normalize_nick(name), seminormalize_nick(name))
+
+    def query_seen(self, user):
+        with self.lock:
+            return self.last_seen.get(user)
+
+    def update_seen(self, user, name, time):
+        with self.lock:
+            self.last_seen[user] = (name, time)
 
     def query_group(self, name):
         with self.lock:
@@ -167,6 +178,11 @@ class NotificationDistributorSQLite(NotificationDistributor):
                                   'name TEXT,'
                                   'PRIMARY KEY (groupname, member)'
                               ')')
+            self.curs.execute('CREATE TABLE IF NOT EXISTS seen ('
+                                  'user TEXT PRIMARY KEY,'
+                                  'name TEXT,'
+                                  'timestamp REAL'
+                              ')')
 
     def _unwrap_message(self, item):
         return {'id': item[0], 'from': item[1], 'to': item[2],
@@ -181,6 +197,17 @@ class NotificationDistributorSQLite(NotificationDistributor):
 
     def query_user(self, name):
         return (basebot.normalize_nick(name), seminormalize_nick(name))
+
+    def query_seen(self, user):
+        with self.lock:
+            self.curs.execute('SELECT name, timestamp FROM seen '
+                'WHERE user = ?', (user,))
+            return self.curs.fetchone()
+
+    def update_seen(self, user, name, timestamp):
+        with self:
+            self.curs.execute('INSERT OR REPLACE INTO seen VALUES (?, ?, ?)',
+                (user, name, timestamp))
 
     def query_group(self, name):
         with self.lock:
@@ -273,6 +300,9 @@ class TellBot(basebot.Bot):
         distr, reply = self.manager.distributor, meta['reply']
         user = distr.query_user(msg['sender']['name'])
         messages, now, seqs = distr.pop_messages(user[0]), time.time(), {}
+
+        # Update online time database.
+        distr.update_seen(user[0], user[1], now)
 
         # Deliver messages.
         for m in messages:
@@ -528,6 +558,42 @@ class TellBot(basebot.Bot):
 
             # Display new membership.
             display_group(groupname, members, ping, 'after')
+
+        # When was a user last active?
+        elif cmdline[0] == '!seen':
+            # Parse arguments.
+            users, groups = OrderedSet(key=operator.itemgetter(0)), {}
+            it = iter(cmdline[1:])
+            while 1:
+                arg, cnt = parse_userlist(users, groups, it)
+                if arg is None:
+                    break
+                elif arg is Ellipsis:
+                    return
+                elif arg.startswith('--'):
+                    reply('Please specify users or groups only.')
+                    return
+
+            # Handle empty list.
+            if not users:
+                reply('No-one to check for.')
+                return
+
+            # Output information.
+            now, bnn = time.time(), basebot.normalize_nick
+            for user, nick in users:
+                seen = distr.query_seen(user)
+                fnick = format_nick((user, nick), True)
+                if fnick[:1].islower(): fnick = fnick[0].upper() + fnick[1:]
+                if seen is None:
+                    reply('%s not seen.' % fnick)
+                    continue
+                if bnn(nick) != bnn(seen[0]):
+                    comment = ' (as %s)' % format_nick(seen[0], True)
+                else:
+                    comment = ''
+                reply('%s%s last seen %s ago.' % (fnick, comment,
+                    basebot.format_delta(now - seen[1])))
 
 class GCThread(threading.Thread):
     def __init__(self, distr):
