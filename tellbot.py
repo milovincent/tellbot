@@ -451,7 +451,7 @@ class TellBot(basebot.Bot):
         reply = meta['reply']
 
         # Send a message.
-        if cmdline[0] == '!tell':
+        if cmdline[0] in ('!tell', '!tnotify'):
             # Parse arguments.
             recipients = OrderedSet(key=operator.itemgetter(0))
             groups, text = collections.OrderedDict(), None
