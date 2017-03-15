@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: ascii -*-
 
-import sys, os, re, time, operator, collections
+import sys, os, re, time
+import operator, collections
+import fnmatch
 import threading
 import sqlite3
 
@@ -75,6 +77,7 @@ class NotificationDistributor:
     def query_user(self, name): raise NotImplementedError
     def query_seen(self, user): raise NotImplementedError
     def update_seen(self, user, name, time): raise NotImplementedError
+    def list_groups(self): raise NotImplementedError
     def query_group(self, name): raise NotImplementedError
     def update_group(self, name, members): raise NotImplementedError
     def query_messages(self, user): raise NotImplementedError
@@ -102,6 +105,10 @@ class NotificationDistributorMemory(NotificationDistributor):
     def update_seen(self, user, name, time):
         with self.lock:
             self.last_seen[user] = (name, time)
+
+    def list_groups(self):
+        with self.lock:
+            return list(self.groups)
 
     def query_group(self, name):
         with self.lock:
@@ -208,6 +215,11 @@ class NotificationDistributorSQLite(NotificationDistributor):
         with self:
             self.curs.execute('INSERT OR REPLACE INTO seen VALUES (?, ?, ?)',
                 (user, name, timestamp))
+
+    def list_groups(self):
+        with self.lock:
+            self.curs.execute('SELECT groupname FROM groups')
+            return list(i[0] for i in self.curs.fetchall())
 
     def query_group(self, name):
         with self.lock:
@@ -512,6 +524,39 @@ class TellBot(basebot.Bot):
             # Send message.
             self.send_notify(distr, sender, recipients, groups,
                 meta['line'][cmdline[1].offset:], reply, '<re> ' + reason)
+
+        # Enumerate available groups.
+        elif cmdline[0] == '!tgrouplist':
+            # Parse arguments.
+            if len(cmdline) == 1:
+                filt = lambda x: True
+                filt_all = True
+            elif len(cmdline) == 2:
+                filt = re.compile(fnmatch.translate(cmdline[1]), re.I).match
+                filt_all = False
+            else:
+                reply('Please specify a matching pattern or nothing.')
+                return
+
+            # Obtain list.
+            names = ['*' + i for i in distr.list_groups() if filt(i)]
+            names.sort()
+
+            if not names:
+                reply('No groups.' if filt_all else
+                      'No groups mathing pattern.')
+                return
+
+            # Group by first character.
+            groups = []
+            for n in names:
+                if not groups or n[:1] != groups[-1][-1][:1]:
+                    groups.append([n])
+                else:
+                    groups[-1].append(n)
+
+            # Output.
+            reply('\n'.join(map(', '.join, groups)))
 
         # Update a group.
         elif cmdline[0] == '!tgroup':
