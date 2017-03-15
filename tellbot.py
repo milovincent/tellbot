@@ -426,8 +426,9 @@ class TellBot(basebot.Bot):
 
         # Reply with the users from a given list.
         def display_group(groupname, members, ping, comment):
-            head = 'Members of *%s%s%s: ' % (groupname,
-                ' ' if comment else '', comment)
+            head = 'Members of *%s%s%s%s: ' % (groupname,
+                ' ' if comment else '', comment,
+                ' (%s)' % len(members) if members else '')
             tr = lambda x: format_nick(x, ping)
             lst = format_list(map(tr, members), '-none-')
             reply(head + lst)
