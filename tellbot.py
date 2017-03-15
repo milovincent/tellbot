@@ -277,6 +277,33 @@ class TellBot(basebot.Bot):
             return 'myself'
         return (make_mention if ping else seminormalize_nick)(nick)
 
+    def _format_users(self, users, groups, subject):
+        if not users: return ('no-one', {})
+        tr = lambda x: self._format_nick(x[1], True, subject)
+        users, seen, segments, add = users.copy(), set(), [], False
+        reasons = {}
+        for n, c in groups.items():
+            nc = [i for i in c if i[0] not in seen]
+            for normnick, nick in nc:
+                reasons[normnick] = n
+            if n.startswith('@'):
+                if nc:
+                    segments.extend(map(tr, nc))
+                else:
+                    add = True
+            else:
+                names = [tr(i) for i in nc]
+                if len(c) == 0:
+                    names.append('-empty')
+                elif len(nc) == 0:
+                    names.append('-already covered-')
+                elif len(nc) != len(c):
+                    names.append('-already covered-')
+                segments.append('%s (%s)' % (n, format_list(names)))
+            seen.update(i[0] for i in nc)
+        if add: segments.append('-already covered-')
+        return (format_list(segments), reasons)
+
     def handle_chat_ex(self, msg, meta):
         # Format a nickname.
         def format_nick(name):
@@ -314,6 +341,28 @@ class TellBot(basebot.Bot):
                 m['timestamp'], fractions=False), m['text']),
                 handle_delivery)
             seqs[seq] = m
+
+    def send_notify(self, distr, sender, recipients, groups, text, reply,
+                    reason=None):
+        # Format fancy recipient list.
+        reclist, reasons = self._format_users(recipients, groups, sender[1])
+        if text is None:
+            reply('Will not tell %s.' % reclist)
+            return
+
+        # Schedule messages.
+        base = {'text': text, 'from': sender[1], 'timestamp': time.time()}
+        self_remark = False
+        for user, nick in recipients:
+            if user == sender[0]:
+                self_remark = True
+                continue
+            cur_reason = reason or reasons[user]
+            distr.add_message(user, dict(base, reason=cur_reason))
+
+        # Reply.
+        reply('Will tell %s.' % reclist)
+        if self_remark: reply('Delivery to yourself cancelled.')
 
     def handle_command(self, cmdline, meta):
         # Common part of the argument parsers.
@@ -370,29 +419,7 @@ class TellBot(basebot.Bot):
 
         # A string representation of a list of users; arranged by group.
         def format_users(users, groups):
-            if not users: return ('no-one', {})
-            tr = lambda x: format_nick(x, True)
-            users, seen, segments, add = users.copy(), set(), [], False
-            reasons = {}
-            for n, c in groups.items():
-                nc = [i for i in c if i[0] not in seen]
-                for normnick, nick in nc:
-                    reasons[normnick] = n
-                if n.startswith('@'):
-                    if nc:
-                        segments.extend(map(tr, nc))
-                    else:
-                        add = True
-                else:
-                    names = [tr(i) for i in nc]
-                    if len(nc) == 0:
-                        names.append('-already covered-')
-                    elif len(nc) != len(c):
-                        names.append('-already covered-')
-                    segments.append('%s (%s)' % (n, format_list(names)))
-                seen.update(i[0] for i in nc)
-            if add: segments.append('-already covered-')
-            return (format_list(segments), reasons)
+            return self._format_users(users, groups, sender[1])
 
         # Reply with the users from a given list.
         def display_group(groupname, members, ping, comment):
@@ -432,25 +459,8 @@ class TellBot(basebot.Bot):
                     text = meta['line'][arg.offset:]
                     break
 
-            # Abort if no text.
-            reclist, reasons = format_users(recipients, groups)
-            if text is None:
-                reply('Nothing will be delivered to %s.' % reclist)
-                return
-
-            # Schedule messages.
-            base = {'text': text, 'from': sender[1],
-                    'timestamp': time.time()}
-            self_remark = False
-            for user, nick in recipients:
-                if user == sender[0]:
-                    self_remark = True
-                    continue
-                distr.add_message(user, dict(base, reason=reasons[user]))
-
-            # Reply.
-            reply('Message will be delivered to %s.' % reclist)
-            if self_remark: reply('Delivery to yourself cancelled.')
+            # Actual hauling outlined into own function.
+            self.send_notify(distr, sender, recipients, groups, text, reply)
 
         # Reply to a freshly delivered message.
         elif cmdline[0] == '!reply':
@@ -463,20 +473,16 @@ class TellBot(basebot.Bot):
                 reply('Message not recognized.')
                 return
             recipient = distr.query_user(cause['from'])
-            recname = format_nick(recipient, True)
 
-            # Abort if no text.
-            if len(cmdline) == 1:
-                reply('Nothing will be delivered to %s.' % recname)
-                return
-
-            # Schedule message.
-            text = meta['line'][cmdline[1].offset:]
-            distr.add_message(recipient[0], {'text': text, 'from': sender[1],
-                'timestamp': time.time(), 'reason': '<re> ' + recname})
-
-            # Inform user.
-            reply('Message will be delivered to %s.' % recname)
+            # Send message.
+            self.send_notify(
+                distr,
+                sender,
+                OrderedSet((recipient,), key=operator.itemgetter(0)),
+                {'@' + recipient[0]: [recipient]},
+                meta['line'][cmdline[1].offset:],
+                reply,
+                '<re> ' + format_nick(recipient, True))
 
         # Reply to a group.
         elif cmdline[0] == '!reply-all':
@@ -499,26 +505,9 @@ class TellBot(basebot.Bot):
             recipients = OrderedSet(groups[reason],
                                     key=operator.itemgetter(0))
 
-            # Abort if no text.
-            reclist, reasons = format_users(recipients, groups)
-            if len(cmdline) == 1:
-                reply('Nothing will be delivered to %s.' % reclist)
-                return
-
-            # Schedule messages.
-            text = meta['line'][cmdline[1].offset:]
-            base = {'text': text, 'from': sender[1],
-                    'timestamp': time.time(), 'reason': '<re> ' + reason}
-            self_remark = False
-            for user, nick in recipients:
-                if user == sender[0]:
-                    self_remark = True
-                    continue
-                distr.add_message(user, dict(base))
-
-            # Inform user.
-            reply('Message will be delivered to %s.' % reclist)
-            if self_remark: reply('Delivery to yourself cancelled.')
+            # Send message.
+            self.send_notify(distr, sender, recipients, groups,
+                meta['line'][cmdline[1].offset:], reply, '<re> ' + reason)
 
         # Update a group.
         elif cmdline[0] == '!tgroup':
