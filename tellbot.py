@@ -417,10 +417,6 @@ class TellBot(basebot.Bot):
         def format_nick(item, ping):
             return self._format_nick(item[1], ping, sender[1])
 
-        # A string representation of a list of users; arranged by group.
-        def format_users(users, groups):
-            return self._format_users(users, groups, sender[1])
-
         # Reply with the users from a given list.
         def display_group(groupname, members, ping, comment):
             head = 'Members of *%s%s%s: ' % (groupname,
