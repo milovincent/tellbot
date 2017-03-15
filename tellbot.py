@@ -277,7 +277,7 @@ class TellBot(basebot.Bot):
             return 'myself'
         return (make_mention if ping else seminormalize_nick)(nick)
 
-    def handle_chat(self, msg, meta):
+    def handle_chat_ex(self, msg, meta):
         # Format a nickname.
         def format_nick(name):
             return self._format_nick(name, True, user[1])
@@ -297,14 +297,17 @@ class TellBot(basebot.Bot):
             m = seqs.pop(reply.id, None)
             if m: distr.add_delivery(m, reply.data.id, reply.data.time)
 
+        basebot.Bot.handle_chat_ex(self, msg, meta)
         distr, reply = self.manager.distributor, meta['reply']
-        user = distr.query_user(msg['sender']['name'])
-        messages, now, seqs = distr.pop_messages(user[0]), time.time(), {}
+        user, now = distr.query_user(msg['sender']['name']), time.time()
 
         # Update online time database.
-        distr.update_seen(user[0], user[1], now)
+        if not meta['edit'] and not meta['long']:
+            distr.update_seen(user[0], user[1], now)
 
         # Deliver messages.
+        if not meta['live']: return
+        messages, seqs = distr.pop_messages(user[0]), {}
         for m in messages:
             seq = reply('[From %s%s, %s ago] %s' % (format_nick(m['from']),
                 format_reason(m['reason']), basebot.format_delta(now -
