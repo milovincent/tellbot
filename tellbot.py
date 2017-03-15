@@ -550,7 +550,7 @@ class TellBot(basebot.Bot):
             # Group by first character.
             groups = []
             for n in names:
-                if not groups or n[:1] != groups[-1][-1][:1]:
+                if not groups or n[:2] != groups[-1][-1][:2]:
                     groups.append([n])
                 else:
                     groups[-1].append(n)
