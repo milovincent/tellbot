@@ -357,7 +357,8 @@ class TellBot(basebot.Bot):
                                               True)
 
         # Format fancy recipient list.
-        if text is None:
+        text = (text or '').strip()
+        if not text:
             reply('Will not tell %s.' % reclist)
             return
 
