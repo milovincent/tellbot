@@ -277,32 +277,40 @@ class TellBot(basebot.Bot):
             return 'myself'
         return (make_mention if ping else seminormalize_nick)(nick)
 
-    def _format_users(self, users, groups, subject):
+    def _format_users(self, users, groups, subject, prevent_self=False):
         if not users: return ('no-one', {})
-        tr = lambda x: self._format_nick(x[1], True, subject)
-        users, seen, segments, add = users.copy(), set(), [], False
-        reasons = {}
+        tr = lambda x: self._format_nick(x[1], True, subject[1])
+        seen, segnames, segments, reasons = set(), [], {}, {}
         for n, c in groups.items():
-            nc = [i for i in c if i[0] not in seen]
-            for normnick, nick in nc:
-                reasons[normnick] = n
             if n.startswith('@'):
-                if nc:
-                    segments.extend(map(tr, nc))
-                else:
-                    add = True
+                el = c[0]
+                if reasons.get(el[0], '').startswith('*'):
+                    del segments[reasons[el[0]]][el[0]]
+                reasons[el[0]] = n
+                segnames.append(tr(el))
+                seen.add(n)
             else:
-                names = [tr(i) for i in nc]
-                if len(c) == 0:
-                    names.append('-empty')
-                elif len(nc) == 0:
-                    names.append('-already covered-')
-                elif len(nc) != len(c):
-                    names.append('-already covered-')
-                segments.append('%s (%s)' % (n, format_list(names)))
-            seen.update(i[0] for i in nc)
-        if add: segments.append('-already covered-')
-        return (format_list(segments), reasons)
+                nc = [i for i in c if i[0] not in seen]
+                if subject in nc and prevent_self:
+                    nc.remove(subject)
+                    reasons.pop(subject[0], None)
+                    users.discard(subject)
+                for normnick, nick in nc:
+                    reasons[normnick] = n
+                segnames.append(n)
+                segments[n] = collections.OrderedDict(
+                    (i[0], tr(i)) for i in nc)
+                seen.update(i[0] for i in nc)
+        parts = []
+        for n in segnames:
+            if n not in segments:
+                parts.append(n)
+                continue
+            names = list(segments[n].values())
+            if not groups[n] or len(names) != len(groups[n]):
+                names.append('...')
+            parts.append('%s (%s)' % (n, format_list(names)))
+        return (format_list(parts, 'no-one'), reasons)
 
     def handle_chat_ex(self, msg, meta):
         # Format a nickname.
@@ -344,25 +352,23 @@ class TellBot(basebot.Bot):
 
     def send_notify(self, distr, sender, recipients, groups, text, reply,
                     reason=None):
+        # Prevent messages to oneself unless explicit.
+        reclist, reasons = self._format_users(recipients, groups, sender,
+                                              True)
+
         # Format fancy recipient list.
-        reclist, reasons = self._format_users(recipients, groups, sender[1])
         if text is None:
             reply('Will not tell %s.' % reclist)
             return
 
         # Schedule messages.
         base = {'text': text, 'from': sender[1], 'timestamp': time.time()}
-        self_remark = False
         for user, nick in recipients:
-            if user == sender[0]:
-                self_remark = True
-                continue
             cur_reason = reason or reasons[user]
             distr.add_message(user, dict(base, reason=cur_reason))
 
         # Reply.
         reply('Will tell %s.' % reclist)
-        if self_remark: reply('Delivery to yourself cancelled.')
 
     def handle_command(self, cmdline, meta):
         # Common part of the argument parsers.
