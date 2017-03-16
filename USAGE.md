@@ -163,7 +163,7 @@ it from an end, use leading or trailing asterisks `*`.
 
 Reply with time intervals since the users in [`user-list`](#user-lists) were
 last seen (_i.e._ posted something in a room observed by `@TellBot` whilst it
-was running).
+was running), and counts of messages pending delivery to them.
 
 **Examples**
 

@@ -118,7 +118,7 @@ class NotificationDistributorMemory(NotificationDistributor):
 
     def update_seen(self, user, name, time):
         with self.lock:
-            self.last_seen[user] = (name, time)
+            self.last_seen[user] = [name, time, 0]
 
     def list_groups(self):
         with self.lock:
@@ -144,6 +144,7 @@ class NotificationDistributorMemory(NotificationDistributor):
         message['id'] = id(message)
         message['to'] = user
         with self.lock:
+            self.seen.setdefault(user, [message['tonick'], None, 0])[2] += 1
             self.messages.setdefault(user, []).append(message)
 
     def query_delivery(self, msgid):
@@ -221,8 +222,9 @@ class NotificationDistributorSQLite(NotificationDistributor):
 
     def query_seen(self, user):
         with self.lock:
-            self.curs.execute('SELECT name, timestamp FROM seen '
-                'WHERE user = ?', (user,))
+            self.curs.execute('SELECT name, seen.timestamp, COUNT(text) '
+                'FROM seen LEFT JOIN messages ON user = recipient '
+                'AND delivered IS NULL WHERE user = ?', (user,))
             return self.curs.fetchone()
 
     def update_seen(self, user, name, timestamp):
@@ -251,7 +253,7 @@ class NotificationDistributorSQLite(NotificationDistributor):
     def query_messages(self, user):
         with self.lock:
             self.curs.execute('SELECT _rowid_, * FROM messages '
-                'WHERE recipient = ? AND delivered_to IS NULL '
+                'WHERE recipient = ? AND delivered IS NULL '
                 'ORDER BY timestamp', (user,))
             return self._unwrap_messages(self.curs.fetchall())
 
@@ -259,7 +261,7 @@ class NotificationDistributorSQLite(NotificationDistributor):
         with self:
             self.curs.execute('SELECT _rowid_, sender, reason, text, '
                 'timestamp FROM messages WHERE recipient = ? '
-                'AND delivered_to IS NULL ORDER BY timestamp', (user,))
+                'AND delivered IS NULL ORDER BY timestamp', (user,))
             msgs = tuple(self.curs.fetchall())
             return self._unwrap_messages((i, s, user, w, c, t, None, None)
                                          for i, s, w, c, t in msgs)
@@ -372,6 +374,7 @@ class TellBot(basebot.Bot):
         if not meta['live']: return
         messages, seqs = distr.pop_messages(user[0]), {}
         for m in messages:
+            distr.add_delivery(m, None, now)
             seq = reply('[From %s%s, %s ago] %s' % (format_nick(m['from']),
                 format_reason(m['reason']), basebot.format_delta(now -
                 m['timestamp'], fractions=False), m['text']),
@@ -394,7 +397,7 @@ class TellBot(basebot.Bot):
         base = {'text': text, 'from': sender[1], 'timestamp': time.time()}
         for user, nick in recipients:
             cur_reason = reason or reasons[user]
-            distr.add_message(user, dict(base, reason=cur_reason))
+            distr.add_message(user, dict(base, tonick=nick, reason=cur_reason))
 
         # Reply.
         reply('Will tell %s.' % reclist)
@@ -640,17 +643,24 @@ class TellBot(basebot.Bot):
             now, bnn = time.time(), basebot.normalize_nick
             for user, nick in users:
                 seen = distr.query_seen(user)
+                if seen is None: seen = (None, None, 0)
+                if not seen[2]:
+                    pm = ''
+                elif seen[2] == 1:
+                    pm = ' (1 pending message)'
+                else:
+                    pm = ' (%s pending messages)' % seen[2]
                 fnick = format_nick((user, nick), True)
                 if fnick[:1].islower(): fnick = fnick[0].upper() + fnick[1:]
-                if seen is None:
-                    reply('%s not seen.' % fnick)
+                if seen[1] is None:
+                    reply('%s not seen%s.' % (fnick, pm))
                     continue
                 if bnn(nick) != bnn(seen[0]):
                     comment = ' (as %s)' % format_nick(seen[0], True)
                 else:
                     comment = ''
-                reply('%s%s last seen %s ago.' % (fnick, comment,
-                    basebot.format_delta(now - seen[1])))
+                reply('%s%s last seen %s ago%s.' % (fnick, comment,
+                    basebot.format_delta(now - seen[1]), pm))
 
 class GCThread(threading.Thread):
     def __init__(self, distr):
