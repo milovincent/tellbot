@@ -160,3 +160,52 @@ was running).
     !seen *group
       @person2 last seen 1d 4h 5s ago.
       @person3 last seen 41d 23h 59m ago.
+
+## User lists
+
+`@TellBot` uses a moderately powerful array of incremental set operations to
+allow specifying sets of users.
+
+A **user list** (actually an ordered set) is built starting with a *base*
+(that is empty where not explicitly mentioned) and changing it in accord with
+certain operations in the order the latters are given. Those operations are:
+
+- `+@<nick>`: Add the specified user to the user list (if not already
+  present).
+- `+*<group>`: Add all members to the user list (for each, if not already
+  present).
+- `-@<nick>`: Remove the specified user from the list (if present).
+- `-*<group>`: Remove all members of the group from the user list (for each,
+  if present).
+- `@nick`: A bare nickname is equivalent to adding the user.
+- `*group`: A bare group name is equivalent to adding the group.
+
+Hence, `+` is equivalent to the set union operator, and `-` to the set
+difference operator; applied to the unitary set containing the specified user
+in one case, or to the set of the members of a group in the other. Beyond
+the set semantics, the operators attempt to maintain the relative order of
+users; the addition operators append "new" users to the end of the list.
+Therefore, removing a user and re-adding it will result in pushing it to
+the end.
+
+The order of users does not have any effect _per se_, but is preserved upon
+display.
+
+**Note** that the operations are not commutative; `-@user +@user` will have
+a different effect from `+@user -@user` and discarding both operations
+(respectively, the user will shifted to the end of the list; the user will
+be removed, the user will not be affected at all).
+
+**Examples**
+
+For basic examples, see the respective commands.
+
+- `!tell @person1 @person2 @person1 message` — Deliver a message to @person1
+  and @person2 (_i.e._, the message will *not* reach @person1 twice).
+- `!tell *programmers -*botdevs message` — Deliver a message to all
+  programmers except the bot developers.
+- `!tgroup *programmers` — Do not alter *programmers (the special case
+  mentioned in the documentation of `!tgroup` is equivalent to what would
+  happen if it were not there).
+- `!tgroup *programmers -*programmers` — Remove all members from *programmers
+  (_i.e._ clear the group).
