@@ -196,7 +196,8 @@ Therefore, removing a user and re-adding it will result in pushing it to
 the end.
 
 The order of users does not have any effect _per se_, but is preserved upon
-display.
+display; it also affects the group listing shortening in the reply to `!tell`
+(_i.e._ the omitting of users already mentioned elsewhere in the reply).
 
 **Note** that the operations are not commutative; `-@user +@user` will have
 a different effect from both `+@user -@user` and discarding both operations
