@@ -397,7 +397,8 @@ class TellBot(basebot.Bot):
         base = {'text': text, 'from': sender[1], 'timestamp': time.time()}
         for user, nick in recipients:
             cur_reason = reason or reasons[user]
-            distr.add_message(user, dict(base, tonick=nick, reason=cur_reason))
+            distr.add_message(user, dict(base, tonick=nick,
+                                         reason=cur_reason))
 
         # Reply.
         reply('Will tell %s.' % reclist)
@@ -464,203 +465,223 @@ class TellBot(basebot.Bot):
             lst = format_list(map(tr, members), '-none-')
             reply(head + lst)
 
+        # Accumulate a reply.
+        def reply(msg):
+            replybuf.append(msg)
+        # Drain all replies.
+        def flush():
+            if replybuf:
+                meta['reply']('\n'.join(replybuf))
+                replybuf[:] = []
+
         basebot.Bot.handle_command(self, cmdline, meta)
         distr = self.manager.distributor
         sender = distr.query_user(meta['msg']['sender']['name'])
-        reply = meta['reply']
+        replybuf = []
 
-        # Send a message.
-        if cmdline[0] in ('!tell', '!tnotify'):
-            # Parse arguments.
-            recipients = OrderedSet(key=operator.itemgetter(0))
-            groups, text = collections.OrderedDict(), None
-            it = iter(cmdline[1:])
-            while 1:
-                arg, count = parse_userlist(recipients, groups, it)
-                if arg is None:
-                    break
-                elif arg is Ellipsis:
+        # Ensure replies are delivered.
+        try:
+
+            # Send a message.
+            if cmdline[0] in ('!tell', '!tnotify'):
+                # Parse arguments.
+                recipients = OrderedSet(key=operator.itemgetter(0))
+                groups, text = collections.OrderedDict(), None
+                it = iter(cmdline[1:])
+                while 1:
+                    arg, count = parse_userlist(recipients, groups, it)
+                    if arg is None:
+                        break
+                    elif arg is Ellipsis:
+                        return
+                    elif arg == '--':
+                        try:
+                            text = meta['line'][next(it).offset:]
+                        except StopIteration:
+                            pass
+                        break
+                    elif arg.startswith('--'):
+                        reply('Unknown option %s.' % arg)
+                        return
+                    else:
+                        text = meta['line'][arg.offset:]
+                        break
+
+                # Actual hauling outlined into own function.
+                self.send_notify(distr, sender, recipients, groups, text,
+                                 reply)
+
+            # Reply to a freshly delivered message.
+            elif cmdline[0] == '!reply':
+                # Determine recipient.
+                if meta['msg']['parent'] is None:
+                    reply('Nothing to reply to.')
                     return
-                elif arg == '--':
-                    try:
-                        text = meta['line'][next(it).offset:]
-                    except StopIteration:
-                        pass
-                    break
-                elif arg.startswith('--'):
-                    reply('Unknown option %s.' % arg)
+                cause = distr.query_delivery(meta['msg']['parent'])
+                if cause is None:
+                    reply('Message not recognized.')
                     return
+                recipient = distr.query_user(cause['from'])
+
+                # Send message.
+                self.send_notify(
+                    distr,
+                    sender,
+                    OrderedSet((recipient,), key=operator.itemgetter(0)),
+                    {'@' + recipient[0]: [recipient]},
+                    meta['line'][cmdline[1].offset:],
+                    reply,
+                    '<re> ' + format_nick(recipient, True))
+
+            # Reply to a group.
+            elif cmdline[0] == '!reply-all':
+                # Determine recipient.
+                if meta['msg']['parent'] is None:
+                    reply('Nothing to reply to.')
+                    return
+                cause = distr.query_delivery(meta['msg']['parent'])
+                if cause is None:
+                    reply('Message not recognized.')
+                    return
+                reason = cause['reason']
+                if reason.startswith('<re> '): reason = reason[5:]
+
+                # Determine group members.
+                if reason.startswith('@'):
+                    groups = {reason: [distr.query_user(reason[1:])]}
                 else:
-                    text = meta['line'][arg.offset:]
-                    break
+                    groups = {reason: distr.query_group(reason[1:])}
+                recipients = OrderedSet(groups[reason],
+                                        key=operator.itemgetter(0))
 
-            # Actual hauling outlined into own function.
-            self.send_notify(distr, sender, recipients, groups, text, reply)
+                # Send message.
+                self.send_notify(distr, sender, recipients, groups,
+                    meta['line'][cmdline[1].offset:], reply,
+                    '<re> ' + reason)
 
-        # Reply to a freshly delivered message.
-        elif cmdline[0] == '!reply':
-            # Determine recipient.
-            if meta['msg']['parent'] is None:
-                reply('Nothing to reply to.')
-                return
-            cause = distr.query_delivery(meta['msg']['parent'])
-            if cause is None:
-                reply('Message not recognized.')
-                return
-            recipient = distr.query_user(cause['from'])
-
-            # Send message.
-            self.send_notify(
-                distr,
-                sender,
-                OrderedSet((recipient,), key=operator.itemgetter(0)),
-                {'@' + recipient[0]: [recipient]},
-                meta['line'][cmdline[1].offset:],
-                reply,
-                '<re> ' + format_nick(recipient, True))
-
-        # Reply to a group.
-        elif cmdline[0] == '!reply-all':
-            # Determine recipient.
-            if meta['msg']['parent'] is None:
-                reply('Nothing to reply to.')
-                return
-            cause = distr.query_delivery(meta['msg']['parent'])
-            if cause is None:
-                reply('Message not recognized.')
-                return
-            reason = cause['reason']
-            if reason.startswith('<re> '): reason = reason[5:]
-
-            # Determine group members.
-            if reason.startswith('@'):
-                groups = {reason: [distr.query_user(reason[1:])]}
-            else:
-                groups = {reason: distr.query_group(reason[1:])}
-            recipients = OrderedSet(groups[reason],
-                                    key=operator.itemgetter(0))
-
-            # Send message.
-            self.send_notify(distr, sender, recipients, groups,
-                meta['line'][cmdline[1].offset:], reply, '<re> ' + reason)
-
-        # Enumerate available groups.
-        elif cmdline[0] == '!tgrouplist':
-            # Parse arguments.
-            if len(cmdline) == 1:
-                filt = lambda x: True
-                filt_all = True
-            elif len(cmdline) == 2:
-                filt = re.compile(fnmatch.translate(cmdline[1]), re.I).match
-                filt_all = False
-            else:
-                reply('Please specify a matching pattern or nothing.')
-                return
-
-            # Obtain list.
-            names = ['*' + i for i in distr.list_groups() if filt(i)]
-            names.sort()
-
-            if not names:
-                reply('No groups.' if filt_all else
-                      'No groups mathing pattern.')
-                return
-
-            # Group by first character.
-            groups = []
-            for n in names:
-                if not groups or n[:2] != groups[-1][-1][:2]:
-                    groups.append([n])
+            # Enumerate available groups.
+            elif cmdline[0] == '!tgrouplist':
+                # Parse arguments.
+                if len(cmdline) == 1:
+                    filt = lambda x: True
+                    filt_all = True
+                elif len(cmdline) == 2:
+                    regex = re.compile(fnmatch.translate(cmdline[1]), re.I)
+                    filt = regex.match
+                    filt_all = False
                 else:
-                    groups[-1].append(n)
-
-            # Output.
-            reply('\n'.join(map(', '.join, groups)))
-
-        # Update a group.
-        elif cmdline[0] == '!tgroup':
-            # Parse arguments.
-            groupname, members, groups, ping = None, None, None, False
-            it, count = iter(cmdline[1:]), 0
-            while 1:
-                arg, cnt = parse_userlist(members, groups, it,
-                                          (groupname is None))
-                count += cnt
-                if arg is None:
-                    break
-                elif arg is Ellipsis:
-                    return
-                elif arg.startswith('*'):
-                    groupname = arg[1:]
-                    old_members = distr.query_group(groupname)
-                    members = OrderedSet(old_members,
-                                         key=operator.itemgetter(0))
-                    groups = {}
-                elif arg == '--ping':
-                    ping = True
-                elif arg.startswith('--') and arg != '--':
-                    reply('Unknown option %s.' % arg)
-                    return
-                else:
-                    reply('Please specify group changes only.')
-                    return
-            if groupname is None:
-                reply('Please specify a group to show or change.')
-                return
-
-            # Display old membership.
-            display_group(groupname, old_members, ping,
-                          '' if count == 0 else 'before')
-            if count == 0: return
-
-            # Apply changes.
-            distr.update_group(groupname, tuple(members))
-
-            # Display new membership.
-            display_group(groupname, members, ping, 'after')
-
-        # When was a user last active?
-        elif cmdline[0] == '!seen':
-            # Parse arguments.
-            users, groups = OrderedSet(key=operator.itemgetter(0)), {}
-            it = iter(cmdline[1:])
-            while 1:
-                arg, cnt = parse_userlist(users, groups, it)
-                if arg is None:
-                    break
-                elif arg is Ellipsis:
-                    return
-                elif arg.startswith('--'):
-                    reply('Please specify users or groups only.')
+                    reply('Please specify a matching pattern or nothing.')
                     return
 
-            # Handle empty list.
-            if not users:
-                reply('No-one to check for.')
-                return
+                # Obtain list.
+                names = ['*' + i for i in distr.list_groups() if filt(i)]
+                names.sort()
 
-            # Output information.
-            now, bnn = time.time(), basebot.normalize_nick
-            for user, nick in users:
-                seen = distr.query_seen(user)
-                if seen is None: seen = (None, None, 0)
-                if not seen[2]:
-                    pm = ''
-                elif seen[2] == 1:
-                    pm = ' (1 pending message)'
-                else:
-                    pm = ' (%s pending messages)' % seen[2]
-                fnick = format_nick((user, nick), True)
-                if fnick[:1].islower(): fnick = fnick[0].upper() + fnick[1:]
-                if seen[1] is None:
-                    reply('%s not seen%s.' % (fnick, pm))
-                    continue
-                if bnn(nick) != bnn(seen[0]):
-                    comment = ' (as %s)' % format_nick(seen[0], True)
-                else:
-                    comment = ''
-                reply('%s%s last seen %s ago%s.' % (fnick, comment,
-                    basebot.format_delta(now - seen[1]), pm))
+                if not names:
+                    reply('No groups.' if filt_all else
+                          'No groups mathing pattern.')
+                    return
+
+                # Group by first character.
+                groups = []
+                for n in names:
+                    if not groups or n[:2] != groups[-1][-1][:2]:
+                        groups.append([n])
+                    else:
+                        groups[-1].append(n)
+
+                # Output.
+                reply('\n'.join(map(', '.join, groups)))
+
+            # Update a group.
+            elif cmdline[0] == '!tgroup':
+                # Parse arguments.
+                groupname, members, groups, ping = None, None, None, False
+                it, count = iter(cmdline[1:]), 0
+                while 1:
+                    arg, cnt = parse_userlist(members, groups, it,
+                                              (groupname is None))
+                    count += cnt
+                    if arg is None:
+                        break
+                    elif arg is Ellipsis:
+                        return
+                    elif arg.startswith('*'):
+                        groupname = arg[1:]
+                        old_members = distr.query_group(groupname)
+                        members = OrderedSet(old_members,
+                                             key=operator.itemgetter(0))
+                        groups = {}
+                    elif arg == '--ping':
+                        ping = True
+                    elif arg.startswith('--') and arg != '--':
+                        reply('Unknown option %s.' % arg)
+                        return
+                    else:
+                        reply('Please specify group changes only.')
+                        return
+                if groupname is None:
+                    reply('Please specify a group to show or change.')
+                    return
+
+                # Display old membership.
+                display_group(groupname, old_members, ping,
+                              '' if count == 0 else 'before')
+                if count == 0: return
+
+                # Apply changes.
+                distr.update_group(groupname, tuple(members))
+
+                # Display new membership.
+                display_group(groupname, members, ping, 'after')
+
+            # When was a user last active?
+            elif cmdline[0] == '!seen':
+                # Parse arguments.
+                users, groups = OrderedSet(key=operator.itemgetter(0)), {}
+                it = iter(cmdline[1:])
+                while 1:
+                    arg, cnt = parse_userlist(users, groups, it)
+                    if arg is None:
+                        break
+                    elif arg is Ellipsis:
+                        return
+                    elif arg.startswith('--'):
+                        reply('Please specify users or groups only.')
+                        return
+
+                # Handle empty list.
+                if not users:
+                    reply('No-one to check for.')
+                    return
+
+                # Output information.
+                now, bnn = time.time(), basebot.normalize_nick
+                for user, nick in users:
+                    seen = distr.query_seen(user)
+                    if seen is None: seen = (None, None, 0)
+                    if not seen[2]:
+                        pm = ''
+                    elif seen[2] == 1:
+                        pm = ' (1 pending message)'
+                    else:
+                        pm = ' (%s pending messages)' % seen[2]
+                    fnick = format_nick((user, nick), True)
+                    if fnick[:1].islower():
+                        fnick = fnick[0].upper() + fnick[1:]
+                    if seen[1] is None:
+                        reply('%s not seen%s.' % (fnick, pm))
+                        continue
+                    if bnn(nick) != bnn(seen[0]):
+                        comment = ' (as %s)' % format_nick(seen[0], True)
+                    else:
+                        comment = ''
+                    reply('%s%s last seen %s ago%s.' % (fnick, comment,
+                        basebot.format_delta(now - seen[1]), pm))
+
+        # Deliver replies.
+        finally:
+            flush()
 
 class GCThread(threading.Thread):
     def __init__(self, distr):
