@@ -345,7 +345,7 @@ class TellBot(basebot.Bot):
     def handle_chat_ex(self, msg, meta):
         # Format a nickname.
         def format_nick(name):
-            return self._format_nick(name, True, user[1])
+            return self._format_nick(name, False, user[1])
 
         # Format a delivery reason.
         def format_reason(src):
@@ -375,7 +375,7 @@ class TellBot(basebot.Bot):
         messages, seqs = distr.pop_messages(user[0]), {}
         for m in messages:
             distr.add_delivery(m, None, now)
-            seq = reply('[From %s%s, %s ago] %s' % (format_nick(m['from']),
+            seq = reply('[%s%s, %s ago] %s' % (format_nick(m['from']),
                 format_reason(m['reason']), basebot.format_delta(now -
                 m['timestamp'], fractions=False), m['text']),
                 handle_delivery)
