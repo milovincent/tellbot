@@ -231,7 +231,7 @@ class NotificationDistributorSQLite(NotificationDistributor):
             head = self.curs.fetchone()
             if head is None: head = (None, None)
             self.curs.execute('SELECT COUNT(*) FROM messages '
-                'WHERE recipient = ?', (user,))
+                'WHERE recipient = ? AND delivered IS NULL', (user,))
             tail = self.curs.fetchone()
             return head + tail
 
