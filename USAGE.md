@@ -14,6 +14,13 @@ recipients from the message body (such as when the message starts with an
 @-mention; it is not included in the delivered message. (To send a message
 starting with a double dash, duplicate the separator.)
 
+If the message is empty (or consists of only whitespace), it is dropped (and
+the potential recipients are not notified), but the list of recipients is
+still displayed; this may be useful to observe the effects of different user
+list operations (see the [corresponding section](#user-lists)). Leading or
+trailing whitespace is stripped from the message; whitespace "inside" the
+message is unaltered.
+
 If you submit a notify to a group that does include yourself and do not
 explicitly include yourself as a recipient, you will be dropped from the
 recipient list; this aids messaging groups. Explicit mention of yourself
