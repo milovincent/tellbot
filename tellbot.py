@@ -30,6 +30,10 @@ def seminormalize_nick(nick):
 def make_mention(nick):
     return '@' + re.sub(r'\s+', '', nick)
 
+def titlefirst(s):
+    if not s: return ''
+    return s[0].upper() + s[1:]
+
 def format_list(l, fallback=None):
     l = tuple(l)
     if len(l) == 0:
@@ -303,13 +307,15 @@ class TellBot(basebot.Bot):
     SHORT_HELP = 'I can schedule messages to be delivered to other users.'
     LONG_HELP = HELP_TEXT
 
-    def _format_nick(self, nick, ping=True, subject=None):
+    def _format_nick(self, nick, ping=True, subject=None, title=False):
         nnick = basebot.normalize_nick(nick)
+        ttr = (titlefirst if title else lambda x: x)
         if subject and nnick == basebot.normalize_nick(subject):
-            return 'yourself'
+            return ttr('yourself')
         elif nnick == basebot.normalize_nick(self.nickname):
-            return 'myself'
-        return (make_mention if ping else seminormalize_nick)(nick)
+            return ttr('myself')
+        else:
+            return (make_mention if ping else seminormalize_nick)(nick)
 
     def _format_users(self, users, groups, subject, prevent_self=False):
         if not users: return ('no-one', {})
@@ -348,8 +354,8 @@ class TellBot(basebot.Bot):
 
     def handle_chat_ex(self, msg, meta):
         # Format a nickname.
-        def format_nick(name):
-            return self._format_nick(name, False, user[1])
+        def format_nick(name, title):
+            return self._format_nick(name, False, user[1], title=title)
 
         # Format a delivery reason.
         def format_reason(src):
@@ -357,7 +363,7 @@ class TellBot(basebot.Bot):
                 res = format_reason(src[5:])
                 return ' replying' + res
             elif src.startswith('@'):
-                return ' to ' + format_nick(src[1:])
+                return ' to ' + format_nick(src[1:], False)
             else:
                 return ' to ' + src
 
@@ -379,7 +385,7 @@ class TellBot(basebot.Bot):
         messages, seqs = distr.pop_messages(user[0]), {}
         for m in messages:
             distr.add_delivery(m, None, now)
-            seq = reply('[%s%s, %s ago] %s' % (format_nick(m['from']),
+            seq = reply('[%s%s, %s ago] %s' % (format_nick(m['from'], True),
                 format_reason(m['reason']), basebot.format_delta(now -
                 m['timestamp'], fractions=False), m['text']),
                 handle_delivery)
@@ -670,9 +676,7 @@ class TellBot(basebot.Bot):
                         pm = ' (1 pending message)'
                     else:
                         pm = ' (%s pending messages)' % seen[2]
-                    fnick = format_nick((user, nick), True)
-                    if fnick[:1].islower():
-                        fnick = fnick[0].upper() + fnick[1:]
+                    fnick = titlefirst(format_nick((user, nick), True))
                     if seen[1] is None:
                         reply('%s not seen%s.' % (fnick, pm))
                         continue

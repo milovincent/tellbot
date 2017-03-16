@@ -61,13 +61,13 @@ with any character). Implicit self exclusion happens in the case of
 
 **Examples**
 
-    [From yourself to yourself, 5s ago] some message
+    [Yourself to yourself, 5s ago] some message
       !reply some reply
 
-    [From @person to *group, 5s ago] another message
+    [person to *group, 5s ago] another message
       !reply Can you clarify that a bit?
 
-    [From @person to *group, 5s ago] yet another message
+    [person to *group, 5s ago] yet another message
       !reply-all another reply
 
 ### !tgroup
