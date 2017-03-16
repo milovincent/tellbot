@@ -222,10 +222,14 @@ class NotificationDistributorSQLite(NotificationDistributor):
 
     def query_seen(self, user):
         with self.lock:
-            self.curs.execute('SELECT name, seen.timestamp, COUNT(text) '
-                'FROM seen LEFT JOIN messages ON user = recipient '
-                'AND delivered IS NULL WHERE user = ?', (user,))
-            return self.curs.fetchone()
+            self.curs.execute('SELECT name, seen.timestamp FROM seen '
+                'WHERE user = ?', (user,))
+            head = self.curs.fetchone()
+            if head is None: head = (None, None)
+            self.curs.execute('SELECT COUNT(*) FROM messages '
+                'WHERE recipient = ?', (user,))
+            tail = self.curs.fetchone()
+            return head + tail
 
     def update_seen(self, user, name, timestamp):
         with self:
