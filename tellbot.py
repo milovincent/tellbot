@@ -10,6 +10,7 @@ import sqlite3
 import basebot
 
 REPLY_TIMEOUT = 3600
+GC_INTERVAL = 3600
 
 HELP_TEXT = '''
 To add a message to other users' mailbox, use
@@ -707,7 +708,7 @@ class GCThread(threading.Thread):
         cont = True
         while cont:
             self.distr.gc()
-            wakeup = time.time() + REPLY_TIMEOUT
+            wakeup = time.time() + GC_INTERVAL
             with self.cond:
                 while not self.exiting:
                     now = time.time()
