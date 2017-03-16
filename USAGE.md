@@ -221,5 +221,6 @@ For basic examples, see the respective commands.
 - `!tgroup *programmers` — Do not alter *programmers (the special case
   mentioned in the documentation of `!tgroup` is equivalent to what would
   happen if it were not there).
+- `!tgroup *programmers *botdevs` — Add all bot developers to *programmers.
 - `!tgroup *programmers -*programmers` — Remove all members from *programmers
   (_i.e._ clear the group).
