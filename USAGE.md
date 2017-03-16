@@ -3,7 +3,13 @@
 `@TellBot` is in a public alpha release, and under active development.
 The command set may change upon popular demand or developer decision.
 
-## !tell a.k.a. !tnotify
+## Commands
+
+Aside from the mandatory commands from the
+["botrulez"](https://github.com/jedevc/botrulez), `@TellBot` implements the
+following concrete commands:
+
+### !tell a.k.a. !tnotify
 
     !tell <user-list> [--] <message>
     !tnotify <user-list> [--] <message>
@@ -38,7 +44,7 @@ closeness to the corresponding `@NotBot` command.
 
     !tell *group -- @somebot stopped working, can you check?
 
-## !reply and !reply-all
+### !reply and !reply-all
 
     !reply <message>
     !reply-all <message>
@@ -64,7 +70,7 @@ with any character). Implicit self exclusion happens in the case of
     [From @person to *group, 5s ago] yet another message
       !reply-all another reply
 
-## !tgroup
+### !tgroup
 
     !tgroup [--ping] *<group> [<user-list>]
 
@@ -86,7 +92,7 @@ passed, user names are not @-mentioned to avoid unnecessary alerting.
       Members of *group before: person1, person2
       Members of *group after: -none-
 
-## !tgrouplist
+### !tgrouplist
 
     !tgrouplist [pattern]
 
@@ -151,7 +157,7 @@ it from an end, use leading or trailing asterisks `*`.
     !tgrouplist *[?]
       *anyquestions?
 
-## !seen
+### !seen
 
     !seen <user-list>
 
