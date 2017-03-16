@@ -11,6 +11,18 @@ import basebot
 
 REPLY_TIMEOUT = 3600
 
+HELP_TEXT = '''
+To add a message to other users' mailbox, use
+    !tell @user1 [@user2 ...] [*group1 ...] message
+    !tnotify @user1 [@user2 ...] [*group1 ...] message
+To create or grow, or shrink a group of users, use
+    !tgroup *group @user1 [@user2 ...] [*group1 ...]
+    !tgroup *group -@user1 [-@user2 ...] [-*group1 ...]
+To list available groups, use
+    !tgrouplist
+For a thorough manual, see https://github.com/CylonicRaider/tellbot.
+'''[1:-1]
+
 def seminormalize_nick(nick):
     return re.sub(r'\s+', '', nick)
 def make_mention(nick):
@@ -280,6 +292,8 @@ class NotificationDistributorSQLite(NotificationDistributor):
 class TellBot(basebot.Bot):
     BOTNAME = 'TellBot'
     NICKNAME = 'TellBot'
+    SHORT_HELP = 'I can schedule messages to be delivered to other users.'
+    LONG_HELP = HELP_TEXT
 
     def _format_nick(self, nick, ping=True, subject=None):
         nnick = basebot.normalize_nick(nick)
