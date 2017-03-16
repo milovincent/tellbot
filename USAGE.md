@@ -11,7 +11,7 @@ The command set may change upon popular demand or developer decision.
 Schedule `message` to be delivered to all users in the given
 [`user-list`](#user-lists). A `--` separator may be used to separate the
 recipients from the message body (such as when the message starts with an
-@-mention; it is not included in the delivered message. (To send a message
+@-mention); it is not included in the delivered message. (To send a message
 starting with a double dash, duplicate the separator.)
 
 If the message is empty (or consists of only whitespace), it is dropped (and
@@ -21,11 +21,11 @@ list operations (see the [corresponding section](#user-lists)). Leading or
 trailing whitespace is stripped from the message; whitespace "inside" the
 message is unaltered.
 
-If you submit a notify to a group that does include yourself and do not
-explicitly include yourself as a recipient, you will be dropped from the
-recipient list; this aids messaging groups. Explicit mention of yourself
-is interpreted as the explicit intention of delivering the message to
-yourself.
+If you submit a message to a group you are a member of and do not explicitly
+include yourself as a recipient, you will be dropped from the recipient list;
+this aids messaging groups without redundantly showing you the text you
+presumably already read while composing it. Explicit mention of yourself is
+interpreted as the explicit intent of delivering the message to yourself.
 
 `!tell` and `!tnotify` are exactly equivalent; the latter is provided for
 closeness to the corresponding `@NotBot` command.
@@ -50,8 +50,8 @@ the group the message was sent to (`!reply-all`). If the message was not sent
 to a group, both behave equivalently.
 
 The message starts immediately after the command (and can in particular start
-with any character). Implicit self exclusion necessarily happens in the case
-of `!reply-all`, and does not happen for `!reply`.
+with any character). Implicit self exclusion happens in the case of
+`!reply-all`, and does not happen for `!reply`.
 
 **Examples**
 
@@ -175,7 +175,7 @@ allow specifying sets of users.
 
 A **user list** (actually an ordered set) is built starting with a *base*
 (that is empty where not explicitly mentioned) and changing it in accord with
-certain operations in the order the latters are given. Those operations are:
+certain operations in the order the latters are given. These operations are:
 
 - `+@<nick>`: Add the specified user to the user list (if not already
   present).
@@ -184,8 +184,8 @@ certain operations in the order the latters are given. Those operations are:
 - `-@<nick>`: Remove the specified user from the list (if present).
 - `-*<group>`: Remove all members of the group from the user list (for each,
   if present).
-- `@nick`: A bare nickname is equivalent to adding the user.
-- `*group`: A bare group name is equivalent to adding the group.
+- `@nick`: A "bare" nickname is equivalent to adding the user.
+- `*group`: A "bare" group name is equivalent to adding the group.
 
 Hence, `+` is equivalent to the set union operator, and `-` to the set
 difference operator; applied to the unitary set containing the specified user
@@ -199,8 +199,8 @@ The order of users does not have any effect _per se_, but is preserved upon
 display.
 
 **Note** that the operations are not commutative; `-@user +@user` will have
-a different effect from `+@user -@user` and discarding both operations
-(respectively, the user will shifted to the end of the list; the user will
+a different effect from both `+@user -@user` and discarding both operations
+(respectively, the user will shifted to the end of the list, the user will
 be removed, the user will not be affected at all).
 
 **Examples**
