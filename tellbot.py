@@ -685,8 +685,13 @@ class TellBot(basebot.Bot):
                         comment = ' (as %s)' % format_nick(seen[0], True)
                     else:
                         comment = ''
-                    reply('%s%s last seen %s ago%s.' % (fnick, comment,
-                        basebot.format_delta(now - seen[1]), pm))
+                    if now - seen[1] < 1:
+                        delta = 'just now'
+                    else:
+                        delta = (basebot.format_delta(now - seen[1], False) +
+                                 ' ago')
+                    reply('%s%s last seen on %s, %s%s.' % (fnick, comment,
+                        basebot.format_datetime(seen[1], False), delta, pm))
 
         # Deliver replies.
         finally:
