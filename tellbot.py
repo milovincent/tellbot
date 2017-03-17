@@ -487,7 +487,7 @@ class TellBot(basebot.Bot):
 
         basebot.Bot.handle_command(self, cmdline, meta)
         distr = self.manager.distributor
-        sender = distr.query_user(meta['msg']['sender']['name'])
+        sender = distr.query_user(meta['sender'])
         replybuf = []
 
         # Ensure replies are delivered.
