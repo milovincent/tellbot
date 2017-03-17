@@ -168,11 +168,11 @@ was running), and counts of messages pending delivery to them.
 **Examples**
 
     !seen @person1
-      @person1 last seen 5m 2s ago.
+      @person1 last seen on {some date}, 5m 2s ago.
 
     !seen *group
-      @person2 last seen 1d 4h 5s ago.
-      @person3 last seen 41d 23h 59m ago.
+      @person2 last seen on {some date}, 1d 4h 5s ago (3 pending messages).
+      @person3 last seen on {some date}, 41d 23h 59m ago.
 
 ## User lists
 
