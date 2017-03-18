@@ -135,11 +135,11 @@ class NotificationDistributorMemory(NotificationDistributor):
         with self.lock:
             return self.seen.get(user)
 
-    def update_seen(self, user, name, time, unread):
+    def update_seen(self, user, name, time, unread, room):
         with self.lock:
-            oldent = self.seen.get(user, (None, None, 0))
-            self.seen[user] = (name, time,
-                oldent[2] if unread is None else unread)
+            oldent = self.seen.get(user, (None, None, 0, None))
+            self.seen[user] = [name, time,
+                oldent[2] if unread is None else unread, room]
             return (unread != oldent[2])
 
     def list_groups(self):
@@ -233,14 +233,16 @@ class NotificationDistributorSQLite(NotificationDistributor):
                                   'user TEXT PRIMARY KEY,'
                                   'name TEXT,'
                                   'timestamp REAL,'
-                                  'unread INTEGER'
+                                  'unread INTEGER,'
+                                  'room TEXT'
                               ')')
-            # Schema upgrade: Add seen.unread column.
+            # Schema upgrades.
             self.curs.execute('PRAGMA table_info(seen);')
             seencols = set(i[1] for i in self.curs.fetchall())
-            if 'unread' not in seencols:
-                self.curs.execute('ALTER TABLE seen '
-                    'ADD COLUMN unread INTEGER')
+            for coldesc in ('unread INTEGER', 'room TEXT'):
+                if coldesc.partition(' ')[0] not in seencols:
+                    self.curs.execute('ALTER TABLE seen '
+                        'ADD COLUMN ' + coldesc)
 
     def _unwrap_message(self, item):
         return {'id': item[0], 'from': item[1], 'to': item[2],
@@ -258,11 +260,11 @@ class NotificationDistributorSQLite(NotificationDistributor):
 
     def query_seen(self, user):
         with self.lock:
-            self.curs.execute('SELECT name, timestamp, unread '
+            self.curs.execute('SELECT name, timestamp, unread, room '
                 'FROM seen WHERE user = ?', (user,))
             return self.curs.fetchone()
 
-    def update_seen(self, user, name, timestamp, unread):
+    def update_seen(self, user, name, timestamp, unread, room):
         with self:
             self.curs.execute('SELECT unread FROM seen WHERE user = ?',
                               (user,))
@@ -270,7 +272,8 @@ class NotificationDistributorSQLite(NotificationDistributor):
             if old_unread is None or old_unread[0] is None: old_unread = (0,)
             if unread is None: unread = old_unread[0]
             self.curs.execute('INSERT OR REPLACE INTO seen '
-                'VALUES (?, ?, ?, ?)', (user, name, timestamp, unread))
+                'VALUES (?, ?, ?, ?, ?)',
+                (user, name, timestamp, unread, room))
             return (old_unread[0] != unread)
 
     def list_groups(self):
@@ -399,7 +402,8 @@ class TellBot(basebot.Bot):
         # Update online time database.
         if meta['edit'] or meta['long']: return
         unread = distr.count_messages(user[0])
-        update = distr.update_seen(user[0], user[1], now, unread)
+        update = distr.update_seen(user[0], user[1], now, unread,
+                                   self.roomname)
 
         # Deliver messages to myself.
         if msg['sender']['session_id'] == self.session_id:
@@ -715,7 +719,7 @@ class TellBot(basebot.Bot):
                 now, bnn = time.time(), basebot.normalize_nick
                 for user, nick in users:
                     seen = distr.query_seen(user)
-                    if seen is None: seen = (None, None, 0, 0)
+                    if seen is None: seen = (None, None, 0, None)
                     unread = distr.count_messages(user)
                     if not unread:
                         pm = ''
@@ -728,16 +732,24 @@ class TellBot(basebot.Bot):
                         reply('%s not seen%s.' % (fnick, pm))
                         continue
                     if bnn(nick) != bnn(seen[0]):
-                        comment = ' (as %s)' % format_nick(seen[0], True)
+                        comment = ' (as %s)' % format_nick((user, seen[0]),
+                                                           True)
                     else:
                         comment = ''
+                    if seen[3] is None:
+                        room = ''
+                    elif seen[3] == self.roomname:
+                        room = ' here'
+                    else:
+                        room = ' in &' + seen[3]
                     if now - seen[1] < 1:
                         delta = 'just now'
                     else:
                         delta = (basebot.format_delta(now - seen[1], False) +
                                  ' ago')
-                    reply('%s%s last seen on %s, %s%s.' % (fnick, comment,
-                        basebot.format_datetime(seen[1], False), delta, pm))
+                    reply('%s%s last seen%s on %s, %s%s.' % (fnick, comment,
+                        room, basebot.format_datetime(seen[1], False), delta,
+                        pm))
 
             # Deliver pending messages.
             elif cmdline[0] == '!inbox':
@@ -756,7 +768,8 @@ class TellBot(basebot.Bot):
                         basebot.format_delta(now - m['timestamp'], False),
                         m['text']), handle_delivery)
                     seqs[seq] = m
-                distr.update_seen(sender[0], sender[1], now, 0)
+                distr.update_seen(sender[0], sender[1], now, 0,
+                                  self.roomname)
 
                 # ...Or none.
                 if not messages:
