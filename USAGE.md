@@ -163,16 +163,20 @@ it from an end, use leading or trailing asterisks `*`.
 
 Reply with time intervals since the users in [`user-list`](#user-lists) were
 last seen (_i.e._ posted something in a room observed by `@TellBot` whilst it
-was running), and counts of messages pending delivery to them.
+was running), the rooms they were in, and counts of messages pending delivery
+to them.
 
 **Examples**
 
     !seen @person1
-      @person1 last seen on {some date}, 5m 2s ago.
+      @person1 last seen here on {some date}, 5m 2s ago.
+
+    !seen @person2
+      @person2 not seen (3 pending messages).
 
     !seen *group
-      @person2 last seen on {some date}, 1d 4h 5s ago (3 pending messages).
-      @person3 last seen on {some date}, 41d 23h 59m ago.
+      @person3 last seen here on {some date}, 1d 4h 5s ago.
+      @person4 last seen here on {some date}, 41d 23h 59m ago.
 
 ## User lists
 
