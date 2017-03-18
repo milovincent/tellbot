@@ -9,6 +9,24 @@ Aside from the mandatory commands from the
 ["botrulez"](https://github.com/jedevc/botrulez), `@TellBot` implements the
 following concrete commands:
 
+### !inbox
+
+    !inbox
+
+Deliver the pending notifies to yourself.
+
+`@TellBot` does not deliver notifies immediately upon any message of the
+recipient (as some others do), but instead shows a notification, which
+advises to use this command.
+
+**Examples**
+
+    !inbox
+      No mail.
+
+    !inbox
+      [Yourself to yourself, 5m ago] message
+
 ### !tell a.k.a. !tnotify
 
     !tell <user-list> [--] <message>
