@@ -93,22 +93,36 @@ class OrderedSet:
             self.discard(item)
 
 class NotificationDistributor:
-    def query_user(self, name): raise NotImplementedError
-    def query_seen(self, user): raise NotImplementedError
-    def update_seen(self, user, name, time): raise NotImplementedError
-    def list_groups(self): raise NotImplementedError
-    def query_group(self, name): raise NotImplementedError
-    def update_group(self, name, members): raise NotImplementedError
-    def query_messages(self, user): raise NotImplementedError
-    def pop_messages(self, user): raise NotImplementedError
-    def add_message(self, user, message): raise NotImplementedError
-    def query_delivery(self, msgid): raise NotImplementedError
-    def add_delivery(self, msg, msgid, timestamp): raise NotImplementedError
-    def gc(self): raise NotImplementedError
+    def query_user(self, name):
+        raise NotImplementedError
+    def query_seen(self, user):
+        raise NotImplementedError
+    def update_seen(self, user, name, time, unread):
+        raise NotImplementedError
+    def list_groups(self):
+        raise NotImplementedError
+    def query_group(self, name):
+        raise NotImplementedError
+    def update_group(self, name, members):
+        raise NotImplementedError
+    def count_messages(self, user):
+        raise NotImplementedError
+    def query_messages(self, user):
+        raise NotImplementedError
+    def pop_messages(self, user):
+        raise NotImplementedError
+    def add_message(self, user, message):
+        raise NotImplementedError
+    def query_delivery(self, msgid):
+        raise NotImplementedError
+    def add_delivery(self, msg, msgid, timestamp):
+        raise NotImplementedError
+    def gc(self):
+        raise NotImplementedError
 
 class NotificationDistributorMemory(NotificationDistributor):
     def __init__(self):
-        self.last_seen = {}
+        self.seen = {}
         self.messages = {}
         self.deliveries = {}
         self.groups = {}
@@ -119,11 +133,14 @@ class NotificationDistributorMemory(NotificationDistributor):
 
     def query_seen(self, user):
         with self.lock:
-            return self.last_seen.get(user)
+            return self.seen.get(user)
 
-    def update_seen(self, user, name, time):
+    def update_seen(self, user, name, time, unread):
         with self.lock:
-            self.last_seen[user] = [name, time, 0]
+            oldent = self.seen.get(user, (None, None, 0))
+            self.seen[user] = (name, time,
+                oldent[2] if unread is None else unread)
+            return (unread != oldent[2])
 
     def list_groups(self):
         with self.lock:
@@ -137,6 +154,10 @@ class NotificationDistributorMemory(NotificationDistributor):
         with self.lock:
             self.groups[name] = members
 
+    def count_messages(self, user):
+        with self.lock:
+            return len(self.messages.get(user, ()))
+
     def query_messages(self, user):
         with self.lock:
             return self.messages.get(user, [])
@@ -149,7 +170,6 @@ class NotificationDistributorMemory(NotificationDistributor):
         message['id'] = id(message)
         message['to'] = user
         with self.lock:
-            self.seen.setdefault(user, [message['tonick'], None, 0])[2] += 1
             self.messages.setdefault(user, []).append(message)
 
     def query_delivery(self, msgid):
@@ -158,6 +178,7 @@ class NotificationDistributorMemory(NotificationDistributor):
 
     def add_delivery(self, msg, msgid, timestamp):
         with self.lock:
+            entry = self.seen.get(msg['to'], None)
             msg['delivered_to'] = msgid
             msg['delivered'] = timestamp
 
@@ -190,6 +211,7 @@ class NotificationDistributorSQLite(NotificationDistributor):
             self.conn = sqlite3.connect(self.filename, isolation_level='',
                                         check_same_thread=False)
             self.curs = self.conn.cursor()
+            # Message table.
             self.curs.execute('CREATE TABLE IF NOT EXISTS messages ('
                                   'sender TEXT,'
                                   'recipient TEXT,'
@@ -199,17 +221,26 @@ class NotificationDistributorSQLite(NotificationDistributor):
                                   'delivered_to TEXT UNIQUE,'
                                   'delivered REAL'
                               ')')
+            # Group table.
             self.curs.execute('CREATE TABLE IF NOT EXISTS groups ('
                                   'groupname TEXT,'
                                   'member TEXT,'
                                   'name TEXT,'
                                   'PRIMARY KEY (groupname, member)'
                               ')')
+            # Seen table.
             self.curs.execute('CREATE TABLE IF NOT EXISTS seen ('
                                   'user TEXT PRIMARY KEY,'
                                   'name TEXT,'
-                                  'timestamp REAL'
+                                  'timestamp REAL,'
+                                  'unread INTEGER'
                               ')')
+            # Schema upgrade: Add seen.unread column.
+            self.curs.execute('PRAGMA table_info(seen);')
+            seencols = set(i[1] for i in self.curs.fetchall())
+            if 'unread' not in seencols:
+                self.curs.execute('ALTER TABLE seen '
+                    'ADD COLUMN unread INTEGER')
 
     def _unwrap_message(self, item):
         return {'id': item[0], 'from': item[1], 'to': item[2],
@@ -227,19 +258,20 @@ class NotificationDistributorSQLite(NotificationDistributor):
 
     def query_seen(self, user):
         with self.lock:
-            self.curs.execute('SELECT name, seen.timestamp FROM seen '
-                'WHERE user = ?', (user,))
-            head = self.curs.fetchone()
-            if head is None: head = (None, None)
-            self.curs.execute('SELECT COUNT(*) FROM messages '
-                'WHERE recipient = ? AND delivered IS NULL', (user,))
-            tail = self.curs.fetchone()
-            return head + tail
+            self.curs.execute('SELECT name, timestamp, unread '
+                'FROM seen WHERE user = ?', (user,))
+            return self.curs.fetchone()
 
-    def update_seen(self, user, name, timestamp):
+    def update_seen(self, user, name, timestamp, unread):
         with self:
-            self.curs.execute('INSERT OR REPLACE INTO seen VALUES (?, ?, ?)',
-                (user, name, timestamp))
+            self.curs.execute('SELECT unread FROM seen WHERE user = ?',
+                              (user,))
+            old_unread = self.curs.fetchone()
+            if old_unread is None: old_unread = (0,)
+            if unread is None: unread = old_unread[0]
+            self.curs.execute('INSERT OR REPLACE INTO seen '
+                'VALUES (?, ?, ?, ?)', (user, name, timestamp, unread))
+            return (old_unread[0] != unread)
 
     def list_groups(self):
         with self.lock:
@@ -250,7 +282,7 @@ class NotificationDistributorSQLite(NotificationDistributor):
         with self.lock:
             self.curs.execute('SELECT member, name FROM groups '
                 'WHERE groupname = ? ORDER BY _rowid_', (name,))
-            return list(map(tuple, self.curs.fetchall()))
+            return self.curs.fetchall()
 
     def update_group(self, name, members):
         with self:
@@ -258,6 +290,12 @@ class NotificationDistributorSQLite(NotificationDistributor):
                               (name,))
             self.curs.executemany('INSERT INTO groups VALUES (?, ?, ?)',
                                   ((name, m, n) for m, n in members))
+
+    def count_messages(self, user):
+        with self.lock:
+            self.curs.execute('SELECT COUNT(*) FROM messages '
+                'WHERE recipient = ? AND delivered IS NULL', (user,))
+            return self.curs.fetchone()[0]
 
     def query_messages(self, user):
         with self.lock:
@@ -354,43 +392,31 @@ class TellBot(basebot.Bot):
         return (format_list(parts, 'no-one'), reasons)
 
     def handle_chat_ex(self, msg, meta):
-        # Format a nickname.
-        def format_nick(name, title):
-            return self._format_nick(name, False, user[1], title=title)
-
-        # Format a delivery reason.
-        def format_reason(src):
-            if src.startswith('<re> '):
-                res = format_reason(src[5:])
-                return ' replying' + res
-            elif src.startswith('@'):
-                return ' to ' + format_nick(src[1:], False)
-            else:
-                return ' to ' + src
-
-        # Add a delivery notice.
-        def handle_delivery(reply):
-            m = seqs.pop(reply.id, None)
-            if m: distr.add_delivery(m, reply.data.id, reply.data.time)
-
         basebot.Bot.handle_chat_ex(self, msg, meta)
         distr, reply = self.manager.distributor, meta['reply']
         user, now = distr.query_user(msg['sender']['name']), time.time()
 
         # Update online time database.
-        if not meta['edit'] and not meta['long']:
-            distr.update_seen(user[0], user[1], now)
+        if meta['edit'] or meta['long']: return
+        unread = distr.count_messages(user[0])
+        update = distr.update_seen(user[0], user[1], now, unread)
 
-        # Deliver messages.
-        if not meta['live']: return
-        messages, seqs = distr.pop_messages(user[0]), {}
-        for m in messages:
-            distr.add_delivery(m, None, now)
-            seq = reply('[%s%s, %s ago] %s' % (format_nick(m['from'], True),
-                format_reason(m['reason']), basebot.format_delta(now -
-                m['timestamp'], fractions=False), m['text']),
-                handle_delivery)
-            seqs[seq] = m
+        # Deliver messages to myself.
+        if msg['sender']['session_id'] == self.session_id:
+            messages = distr.pop_messages(user[0])
+            for m in messages:
+                distr.add_delivery(m, None, now)
+                # ... reading ...
+            if len(messages) == 1:
+                reply('/me read 1 message.')
+            elif messages:
+                reply('/me read %s messages.' % len(messages))
+        elif update:
+            if unread == 1:
+                reply('You have 1 unread message; use !inbox to read it.')
+            elif unread > 1:
+                reply('You have %s unread messages; use !inbox to read '
+                      'them.' % unread)
 
     def send_notify(self, distr, sender, recipients, groups, text, reply,
                     reason=None):
@@ -464,8 +490,8 @@ class TellBot(basebot.Bot):
             return None, count
 
         # Nickname formatting for output.
-        def format_nick(item, ping):
-            return self._format_nick(item[1], ping, sender[1])
+        def format_nick(item, ping, title=False):
+            return self._format_nick(item[1], ping, sender[1], title)
 
         # Reply with the users from a given list.
         def display_group(groupname, members, ping, comment):
@@ -476,11 +502,28 @@ class TellBot(basebot.Bot):
             lst = format_list(map(tr, members), '-none-')
             reply(head + lst)
 
+        # Format a delivery reason.
+        def format_reason(src):
+            if src.startswith('<re> '):
+                res = format_reason(src[5:])
+                return ' replying' + res
+            elif src.startswith('@'):
+                return ' to ' + format_nick((None, src[1:]), False)
+            else:
+                return ' to ' + src
+
+        # Add a delivery notice.
+        def handle_delivery(reply):
+            m = seqs.pop(reply.id, None)
+            if m: distr.add_delivery(m, reply.data.id, reply.data.time)
+
         # Accumulate a reply.
         def reply(msg):
             replybuf.append(msg)
         # Drain all replies.
-        def flush():
+        def flush(msg=None):
+            if msg is not None:
+                replybuf.append(msg)
             if replybuf:
                 meta['reply']('\n'.join(replybuf))
                 replybuf[:] = []
@@ -670,13 +713,14 @@ class TellBot(basebot.Bot):
                 now, bnn = time.time(), basebot.normalize_nick
                 for user, nick in users:
                     seen = distr.query_seen(user)
-                    if seen is None: seen = (None, None, 0)
-                    if not seen[2]:
+                    if seen is None: seen = (None, None, 0, 0)
+                    unread = distr.count_messages(user)
+                    if not unread:
                         pm = ''
-                    elif seen[2] == 1:
+                    elif unread == 1:
                         pm = ' (1 pending message)'
                     else:
-                        pm = ' (%s pending messages)' % seen[2]
+                        pm = ' (%s pending messages)' % unread
                     fnick = titlefirst(format_nick((user, nick), True))
                     if seen[1] is None:
                         reply('%s not seen%s.' % (fnick, pm))
@@ -692,6 +736,29 @@ class TellBot(basebot.Bot):
                                  ' ago')
                     reply('%s%s last seen on %s, %s%s.' % (fnick, comment,
                         basebot.format_datetime(seen[1], False), delta, pm))
+
+            # Deliver pending messages.
+            elif cmdline[0] == '!inbox':
+                # No arguments.
+                if len(cmdline) != 1:
+                    flush('This takes no additional arguments.')
+
+                # Deliver messages.
+                now = time.time()
+                messages, seqs = distr.pop_messages(sender[0]), {}
+                for m in messages:
+                    distr.add_delivery(m, None, now)
+                    seq = meta['reply']('[%s%s, %s ago] %s' % (
+                        format_nick((None, m['from']), False, True),
+                        format_reason(m['reason']),
+                        basebot.format_delta(now - m['timestamp'], False),
+                        m['text']), handle_delivery)
+                    seqs[seq] = m
+                distr.update_seen(sender[0], sender[1], now, 0)
+
+                # ...Or none.
+                if not messages:
+                    flush('No mail.')
 
         # Deliver replies.
         finally:
