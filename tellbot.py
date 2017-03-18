@@ -267,7 +267,7 @@ class NotificationDistributorSQLite(NotificationDistributor):
             self.curs.execute('SELECT unread FROM seen WHERE user = ?',
                               (user,))
             old_unread = self.curs.fetchone()
-            if old_unread is None: old_unread = (0,)
+            if old_unread is None or old_unread[0] is None: old_unread = (0,)
             if unread is None: unread = old_unread[0]
             self.curs.execute('INSERT OR REPLACE INTO seen '
                 'VALUES (?, ?, ?, ?)', (user, name, timestamp, unread))
