@@ -412,7 +412,9 @@ class TellBot(basebot.Bot):
             elif messages:
                 reply('/me read %s messages.' % len(messages))
         elif update:
-            if unread == 1:
+            if re.match(r'!inbox\b', msg['content']):
+                pass
+            elif unread == 1:
                 reply('You have 1 unread message; use !inbox to read it.')
             elif unread > 1:
                 reply('You have %s unread messages; use !inbox to read '
