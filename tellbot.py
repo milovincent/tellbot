@@ -544,6 +544,7 @@ class TellBot(basebot.Bot):
 
             # Send a message.
             if cmdline[0] in ('!tell', '!tnotify'):
+                self._log_command(cmdline)
                 # Parse arguments.
                 recipients = OrderedSet(key=operator.itemgetter(0))
                 groups, text = collections.OrderedDict(), None
@@ -573,6 +574,7 @@ class TellBot(basebot.Bot):
 
             # Reply to a freshly delivered message.
             elif cmdline[0] == '!reply':
+                self._log_command(cmdline)
                 # Determine recipient.
                 if meta['msg']['parent'] is None:
                     reply('Nothing to reply to.')
@@ -595,6 +597,7 @@ class TellBot(basebot.Bot):
 
             # Reply to a group.
             elif cmdline[0] == '!reply-all':
+                self._log_command(cmdline)
                 # Determine recipient.
                 if meta['msg']['parent'] is None:
                     reply('Nothing to reply to.')
@@ -621,6 +624,7 @@ class TellBot(basebot.Bot):
 
             # Enumerate available groups.
             elif cmdline[0] == '!tgrouplist':
+                self._log_command(cmdline)
                 # Parse arguments.
                 if len(cmdline) == 1:
                     filt = lambda x: True
@@ -655,6 +659,7 @@ class TellBot(basebot.Bot):
 
             # Update a group.
             elif cmdline[0] == '!tgroup':
+                self._log_command(cmdline)
                 # Parse arguments.
                 groupname, members, groups, ping = None, None, None, False
                 it, count = iter(cmdline[1:]), 0
@@ -697,6 +702,7 @@ class TellBot(basebot.Bot):
 
             # When was a user last active?
             elif cmdline[0] == '!seen':
+                self._log_command(cmdline)
                 # Parse arguments.
                 users, groups = OrderedSet(key=operator.itemgetter(0)), {}
                 it = iter(cmdline[1:])
@@ -753,6 +759,7 @@ class TellBot(basebot.Bot):
 
             # Deliver pending messages.
             elif cmdline[0] in ('!inbox', '!boop'):
+                self._log_command(cmdline)
                 # No arguments.
                 if len(cmdline) != 1:
                     flush('This takes no additional arguments.')
