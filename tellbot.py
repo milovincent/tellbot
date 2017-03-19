@@ -416,7 +416,7 @@ class TellBot(basebot.Bot):
             elif messages:
                 reply('/me read %s messages.' % len(messages))
         elif update:
-            if re.match(r'!inbox\b', msg['content']):
+            if re.match(r'!(inbox|boop)\b', msg['content']):
                 pass
             elif unread == 1:
                 reply('You have 1 unread message; use !inbox to read it.')
@@ -752,7 +752,7 @@ class TellBot(basebot.Bot):
                         pm))
 
             # Deliver pending messages.
-            elif cmdline[0] == '!inbox':
+            elif cmdline[0] in ('!inbox', '!boop'):
                 # No arguments.
                 if len(cmdline) != 1:
                     flush('This takes no additional arguments.')
