@@ -769,9 +769,13 @@ class TellBot(basebot.Bot):
                 messages, seqs = distr.pop_messages(sender[0]), {}
                 for m in messages:
                     distr.add_delivery(m, None, now)
+                    if m['reason'] == make_mention(sender[1]):
+                        reason = ''
+                    else:
+                        reason = format_reason(m['reason'])
                     seq = meta['reply']('[%s%s, %s ago] %s' % (
                         format_nick((None, m['from']), False, True),
-                        format_reason(m['reason']),
+                        reason,
                         basebot.format_delta(now - m['timestamp'], False),
                         m['text']), handle_delivery)
                     seqs[seq] = m
