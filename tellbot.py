@@ -446,6 +446,34 @@ class TellBot(basebot.Bot):
         # Reply.
         reply('Will tell %s.' % reclist)
 
+    def deliver_notifies(self, distr, sender, reply):
+        # Add a delivery notice.
+        def handle_delivery(reply):
+            m = seqs.pop(reply.id, None)
+            if m: distr.add_delivery(m, reply.data.id, reply.data.time)
+
+        # Deliver messages.
+        now = time.time()
+        messages, seqs = distr.pop_messages(sender[0]), {}
+        for m in messages:
+            distr.add_delivery(m, None, now)
+            if m['reason'] == make_mention(sender[1]):
+                reason = ''
+            else:
+                reason = format_reason(m['reason'])
+            seq = reply('[%s%s, %s ago] %s' % (
+                self._format_nick(m['from'], False, sender[1], True),
+                reason,
+                basebot.format_delta(now - m['timestamp'], False),
+                m['text']), handle_delivery)
+            seqs[seq] = m
+        distr.update_seen(sender[0], sender[1], now, 0,
+                          self.roomname)
+
+        # ...Or none.
+        if not messages:
+            reply('No mail.')
+
     def handle_command(self, cmdline, meta):
         # Common part of the argument parsers.
         def parse_userlist(base, groups, it, get_group=False):
@@ -517,11 +545,6 @@ class TellBot(basebot.Bot):
                 return ' to ' + format_nick((None, src[1:]), False)
             else:
                 return ' to ' + src
-
-        # Add a delivery notice.
-        def handle_delivery(reply):
-            m = seqs.pop(reply.id, None)
-            if m: distr.add_delivery(m, reply.data.id, reply.data.time)
 
         # Accumulate a reply.
         def reply(msg):
@@ -765,26 +788,7 @@ class TellBot(basebot.Bot):
                     flush('This takes no additional arguments.')
 
                 # Deliver messages.
-                now = time.time()
-                messages, seqs = distr.pop_messages(sender[0]), {}
-                for m in messages:
-                    distr.add_delivery(m, None, now)
-                    if m['reason'] == make_mention(sender[1]):
-                        reason = ''
-                    else:
-                        reason = format_reason(m['reason'])
-                    seq = meta['reply']('[%s%s, %s ago] %s' % (
-                        format_nick((None, m['from']), False, True),
-                        reason,
-                        basebot.format_delta(now - m['timestamp'], False),
-                        m['text']), handle_delivery)
-                    seqs[seq] = m
-                distr.update_seen(sender[0], sender[1], now, 0,
-                                  self.roomname)
-
-                # ...Or none.
-                if not messages:
-                    flush('No mail.')
+                self.deliver_notifies(distr, sender, meta['reply'])
 
         # Deliver replies.
         finally:
