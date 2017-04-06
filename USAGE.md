@@ -15,9 +15,10 @@ following concrete commands:
 
 Deliver the pending notifies to yourself.
 
-`@TellBot` does not deliver notifies immediately upon any message of the
-recipient (as some others do), but instead shows a notification, which
-advises to use this command.
+If a user has been away for a long time (_i.e._ more than a day), `@TellBot`
+does not deliver notifies immediately upon any message of the recipient (as
+some others do), but instead shows a notification, which advises to use this
+command.
 
 **Examples**
 
@@ -25,7 +26,7 @@ advises to use this command.
       No mail.
 
     !inbox
-      [Yourself to yourself, 5m ago] message
+      [Yourself to yourself, 2d 5m ago] message
 
 ### !tell a.k.a. !tnotify
 
