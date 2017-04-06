@@ -105,7 +105,7 @@ class NotificationDistributor:
         raise NotImplementedError
     def update_group(self, name, members):
         raise NotImplementedError
-    def count_messages(self, user):
+    def message_bounds(self, user):
         raise NotImplementedError
     def query_messages(self, user):
         raise NotImplementedError
@@ -154,9 +154,12 @@ class NotificationDistributorMemory(NotificationDistributor):
         with self.lock:
             self.groups[name] = members
 
-    def count_messages(self, user):
+    def message_bounds(self, user):
         with self.lock:
-            return len(self.messages.get(user, ()))
+            msgs = self.messages.get(user, ())
+            if not msgs: return (0, None, None)
+            return (len(msgs), min(m['timestamp'] for m in msgs),
+                    max(m['timestamp'] for m in msgs))
 
     def query_messages(self, user):
         with self.lock:
@@ -294,10 +297,11 @@ class NotificationDistributorSQLite(NotificationDistributor):
             self.curs.executemany('INSERT INTO groups VALUES (?, ?, ?)',
                                   ((name, m, n) for m, n in members))
 
-    def count_messages(self, user):
+    def message_bounds(self, user):
         with self.lock:
-            self.curs.execute('SELECT COUNT(*) FROM messages '
-                'WHERE recipient = ? AND delivered IS NULL', (user,))
+            self.curs.execute('SELECT COUNT(*), MIN(timestamp), '
+                'MAX(timestamp) FROM messages WHERE recipient = ? '
+                'AND delivered IS NULL', (user,))
             return self.curs.fetchone()[0]
 
     def query_messages(self, user):
@@ -401,7 +405,7 @@ class TellBot(basebot.Bot):
 
         # Update online time database.
         if meta['edit'] or meta['long']: return
-        unread = distr.count_messages(user[0])
+        unread, oldest, newest = distr.message_bounds(user[0])
         update = distr.update_seen(user[0], user[1], now, unread,
                                    self.roomname)
 
@@ -418,6 +422,8 @@ class TellBot(basebot.Bot):
         elif update:
             if re.match(r'!(inbox|boop)\b', msg['content']):
                 pass
+            elif oldest >= now - 86400: # 1 day
+                self.deliver_notifies(distr, user, reply)
             elif unread == 1:
                 reply('You have 1 unread message; use !inbox to read it.')
             elif unread > 1:
@@ -749,7 +755,7 @@ class TellBot(basebot.Bot):
                 for user, nick in users:
                     seen = distr.query_seen(user)
                     if seen is None: seen = (None, None, 0, None)
-                    unread = distr.count_messages(user)
+                    unread, oldest, newest = distr.message_bounds(user)
                     if not unread:
                         pm = ''
                     elif unread == 1:
