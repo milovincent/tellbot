@@ -302,7 +302,7 @@ class NotificationDistributorSQLite(NotificationDistributor):
             self.curs.execute('SELECT COUNT(*), MIN(timestamp), '
                 'MAX(timestamp) FROM messages WHERE recipient = ? '
                 'AND delivered IS NULL', (user,))
-            return self.curs.fetchone()[0]
+            return self.curs.fetchone()
 
     def query_messages(self, user):
         with self.lock:
