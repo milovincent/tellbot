@@ -107,9 +107,9 @@ class NotificationDistributor:
         raise NotImplementedError
     def message_bounds(self, user):
         raise NotImplementedError
-    def query_messages(self, user):
+    def query_messages(self, user, stale=False):
         raise NotImplementedError
-    def pop_messages(self, user):
+    def pop_messages(self, user, stale=False):
         raise NotImplementedError
     def add_message(self, user, message):
         raise NotImplementedError
@@ -161,11 +161,11 @@ class NotificationDistributorMemory(NotificationDistributor):
             return (len(msgs), min(m['timestamp'] for m in msgs),
                     max(m['timestamp'] for m in msgs))
 
-    def query_messages(self, user):
+    def query_messages(self, user, stale=False):
         with self.lock:
             return self.messages.get(user, [])
 
-    def pop_messages(self, user):
+    def pop_messages(self, user, stale=False):
         with self.lock:
             return self.messages.pop(user, [])
 
@@ -305,18 +305,21 @@ class NotificationDistributorSQLite(NotificationDistributor):
                 'AND delivered IS NULL', (user,))
             return self.curs.fetchone()
 
-    def query_messages(self, user):
+    def query_messages(self, user, stale=False):
         with self.lock:
-            self.curs.execute('SELECT _rowid_, * FROM messages '
-                'WHERE recipient = ? AND delivered IS NULL '
-                'ORDER BY timestamp', (user,))
+            query = ('SELECT _rowid_, * FROM messages '
+                'WHERE recipient = ? %s ORDER BY timestamp') % (
+                '' if stale else 'AND delivered IS NULL')
+            self.curs.execute(query, (user,))
             return self._unwrap_messages(self.curs.fetchall())
 
-    def pop_messages(self, user):
+    def pop_messages(self, user, stale=False):
         with self:
-            self.curs.execute('SELECT _rowid_, sender, reason, text, '
+            query = ('SELECT _rowid_, sender, reason, text, '
                 'timestamp FROM messages WHERE recipient = ? '
-                'AND delivered IS NULL ORDER BY timestamp', (user,))
+                '%s ORDER BY timestamp') % (
+                '' if stale else 'AND delivered IS NULL')
+            self.curs.execute(query, (user,))
             msgs = tuple(self.curs.fetchall())
             return self._unwrap_messages((i, s, user, w, c, t, None, None)
                                          for i, s, w, c, t in msgs)
@@ -424,7 +427,7 @@ class TellBot(basebot.Bot):
             if re.match(r'!(inbox|boop)\b', msg['content']):
                 pass
             elif oldest is not None and oldest >= now - 86400: # 1 day
-                self.deliver_notifies(distr, user, reply)
+                self.deliver_notifies(distr, user, reply, False)
             elif unread == 1:
                 reply('You have 1 unread message; use !inbox to read it.')
             elif unread > 1:
@@ -453,7 +456,7 @@ class TellBot(basebot.Bot):
         # Reply.
         reply('Will tell %s.' % reclist)
 
-    def deliver_notifies(self, distr, sender, reply):
+    def deliver_notifies(self, distr, sender, reply, stale=False):
         # Format a delivery reason.
         def format_reason(src):
             if src.startswith('<re> '):
@@ -471,7 +474,7 @@ class TellBot(basebot.Bot):
 
         # Deliver messages.
         now = time.time()
-        messages, seqs = distr.pop_messages(sender[0]), {}
+        messages, seqs = distr.pop_messages(sender[0], stale), {}
         for m in messages:
             distr.add_delivery(m, None, now)
             if m['reason'] == make_mention(sender[1]):
@@ -790,12 +793,18 @@ class TellBot(basebot.Bot):
             # Deliver pending messages.
             elif cmdline[0] in ('!inbox', '!boop'):
                 self._log_command(cmdline)
-                # No arguments.
-                if len(cmdline) != 1:
-                    flush('This takes no additional arguments.')
+                # Parse arguments
+                stale = False
+                for arg in cmdline[1:]:
+                    if arg == '--stale':
+                        stale = True
+                    elif arg == '--':
+                        break
+                    elif arg.startswith('-'):
+                        reply('Unknown option %r.' % arg)
 
                 # Deliver messages.
-                self.deliver_notifies(distr, sender, meta['reply'])
+                self.deliver_notifies(distr, sender, meta['reply'], stale)
 
         # Deliver replies.
         finally:
