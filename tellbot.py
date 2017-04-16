@@ -631,7 +631,7 @@ class TellBot(basebot.Bot):
                     {'@' + recipient[0]: [recipient]},
                     meta['line'][cmdline[1].offset:],
                     reply,
-                    '<re> ' + format_nick(recipient, True))
+                    '<re> ' + make_mention(recipient[1]))
 
             # Reply to a group.
             elif cmdline[0] == '!reply-all':
