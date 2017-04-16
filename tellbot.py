@@ -181,7 +181,6 @@ class NotificationDistributorMemory(NotificationDistributor):
 
     def add_delivery(self, msg, msgid, timestamp):
         with self.lock:
-            entry = self.seen.get(msg['to'], None)
             msg['delivered_to'] = msgid
             msg['delivered'] = timestamp
             self.deliveries[msgid] = msg
@@ -467,26 +466,32 @@ class TellBot(basebot.Bot):
             else:
                 return ' to ' + src
 
-        # Add a delivery notice.
-        def handle_delivery(reply):
-            m = seqs.pop(reply.id, None)
-            if m: distr.add_delivery(m, reply.data.id, reply.data.time)
-
-        # Deliver messages.
-        now = time.time()
-        messages, seqs = distr.pop_messages(sender[0], stale), {}
-        for m in messages:
+        # Actually deliver a message.
+        def deliver_message():
+            # Add a delivery notice.
+            def handle_delivery(reply):
+                distr.add_delivery(m, reply.data.id, reply.data.time)
+                deliver_message()
+            try:
+                m = next(msgitr)
+            except StopIteration:
+                return
             distr.add_delivery(m, None, now)
             if m['reason'] == make_mention(sender[1]):
                 reason = ''
             else:
                 reason = format_reason(m['reason'])
-            seq = reply('[%s%s, %s ago] %s' % (
+            reply('[%s%s, %s ago] %s' % (
                 self._format_nick(m['from'], False, sender[1], True),
                 reason,
                 basebot.format_delta(now - m['timestamp'], False),
                 m['text']), handle_delivery)
-            seqs[seq] = m
+
+        # Deliver messages.
+        now = time.time()
+        messages = distr.pop_messages(sender[0], stale)
+        msgitr = iter(messages)
+        deliver_message()
         distr.update_seen(sender[0], sender[1], now, 0,
                           self.roomname)
 
