@@ -11,9 +11,15 @@ following concrete commands:
 
 ### !inbox
 
-    !inbox
+    !inbox [--stale]
 
-Deliver the pending notifies to yourself.
+Deliver the pending notifies to yourself. If `--stale` is passed, also post
+messages again that were delivered to you (this can be tried as a last effort
+of error recovery).
+
+To immediately comment on the messages, you can also (after a `--` separator)
+post comments in the same message as the command; this is discouraged and may
+change in the future.
 
 If a user has been away for a long time (_i.e._ more than a day), `@TellBot`
 does not deliver notifies immediately upon any message of the recipient (as
@@ -27,6 +33,9 @@ command.
 
     !inbox
       [Yourself to yourself, 2d 5m ago] message
+
+    !inbox --stale
+      [Yourself to yourself, 2d 5m 13s ago] message
 
 ### !tell a.k.a. !tnotify
 
