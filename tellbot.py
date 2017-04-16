@@ -423,7 +423,7 @@ class TellBot(basebot.Bot):
         elif update:
             if re.match(r'!(inbox|boop)\b', msg['content']):
                 pass
-            elif oldest >= now - 86400: # 1 day
+            elif oldest is not None and oldest >= now - 86400: # 1 day
                 self.deliver_notifies(distr, user, reply)
             elif unread == 1:
                 reply('You have 1 unread message; use !inbox to read it.')
