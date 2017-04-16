@@ -453,6 +453,16 @@ class TellBot(basebot.Bot):
         reply('Will tell %s.' % reclist)
 
     def deliver_notifies(self, distr, sender, reply):
+        # Format a delivery reason.
+        def format_reason(src):
+            if src.startswith('<re> '):
+                res = format_reason(src[5:])
+                return ' replying' + res
+            elif src.startswith('@'):
+                return ' to ' + format_nick((None, src[1:]), False)
+            else:
+                return ' to ' + src
+
         # Add a delivery notice.
         def handle_delivery(reply):
             m = seqs.pop(reply.id, None)
@@ -541,16 +551,6 @@ class TellBot(basebot.Bot):
             tr = lambda x: format_nick(x, ping)
             lst = format_list(map(tr, members), '-none-')
             reply(head + lst)
-
-        # Format a delivery reason.
-        def format_reason(src):
-            if src.startswith('<re> '):
-                res = format_reason(src[5:])
-                return ' replying' + res
-            elif src.startswith('@'):
-                return ' to ' + format_nick((None, src[1:]), False)
-            else:
-                return ' to ' + src
 
         # Accumulate a reply.
         def reply(msg):
