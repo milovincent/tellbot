@@ -177,13 +177,14 @@ class NotificationDistributorMemory(NotificationDistributor):
 
     def query_delivery(self, msgid):
         with self.lock:
-            return self.deliveries[msgid]
+            return self.deliveries.get(msgid)
 
     def add_delivery(self, msg, msgid, timestamp):
         with self.lock:
             entry = self.seen.get(msg['to'], None)
             msg['delivered_to'] = msgid
             msg['delivered'] = timestamp
+            self.deliveries[msgid] = msg
 
     def gc(self):
         deadline = time.time() - REPLY_TIMEOUT
