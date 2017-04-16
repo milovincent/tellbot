@@ -460,7 +460,7 @@ class TellBot(basebot.Bot):
                 res = format_reason(src[5:])
                 return ' replying' + res
             elif src.startswith('@'):
-                return ' to ' + format_nick((None, src[1:]), False)
+                return ' to ' + self._format_nick(src[1:], False, sender[1])
             else:
                 return ' to ' + src
 
