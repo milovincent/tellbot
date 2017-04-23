@@ -98,14 +98,21 @@ with any character). Implicit self exclusion happens in the case of
     [person to *group, 5s ago] yet another message
       !reply-all another reply
 
-### !tgroup
+### !tgroup and !tungroup
 
     !tgroup [--ping] *<group> [<user-list>]
+    !tungroup [--ping] *<group> <user-list>
 
-Update the given `group` with the result of building
+`!tgroup`: Update the given `group` with the result of building
 [`user-list`](#user-lists) basing upon it. If `user-list` is empty, the
-members of the group are displayed without mutating it. Unless `--ping` is
-passed, user names are not @-mentioned to avoid unnecessary alerting.
+members of the group are displayed without mutating it.
+
+`!tungroup`: Remove all members of `user-list` (starting with an empty
+set) from the group. Note that the `user-list` must be nonempty; otherwise,
+the command has no effect.
+
+Unless `--ping` is passed, user names are not @-mentioned to avoid
+unnecessary alerting.
 
 **Examples**
 
