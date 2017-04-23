@@ -702,7 +702,7 @@ class TellBot(basebot.Bot):
                 reply('\n'.join(map(', '.join, groups)))
 
             # Update a group.
-            elif cmdline[0] == '!tgroup':
+            elif cmdline[0] in ('!tgroup', '!tungroup'):
                 self._log_command(cmdline)
                 # Parse arguments.
                 groupname, members, groups, ping = None, None, None, False
@@ -718,8 +718,11 @@ class TellBot(basebot.Bot):
                     elif arg.startswith('*'):
                         groupname = arg[1:]
                         old_members = distr.query_group(groupname)
-                        members = OrderedSet(old_members,
-                                             key=operator.itemgetter(0))
+                        if cmdline[0] == '!tgroup':
+                            members = OrderedSet(old_members,
+                                                 key=operator.itemgetter(0))
+                        else:
+                            members = OrderedSet(key=operator.itemgetter(0))
                         groups = {}
                     elif arg == '--ping':
                         ping = True
@@ -732,6 +735,9 @@ class TellBot(basebot.Bot):
                 if groupname is None:
                     reply('Please specify a group to show or change.')
                     return
+                elif cmdline[0] == '!tungroup' and count == 0:
+                    reply('Nothing to be done.')
+                    return
 
                 # Display old membership.
                 display_group(groupname, old_members, ping,
@@ -739,6 +745,11 @@ class TellBot(basebot.Bot):
                 if count == 0: return
 
                 # Apply changes.
+                if cmdline[0] == '!tungroup':
+                    removes = members
+                    members = OrderedSet(old_members,
+                                         key=operator.itemgetter(0))
+                    members.discard_all(removes)
                 distr.update_group(groupname, tuple(members))
 
                 # Display new membership.
