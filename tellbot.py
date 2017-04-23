@@ -92,6 +92,10 @@ class OrderedSet:
         for item in items:
             self.discard(item)
 
+    def sort(self, key=None, reverse=False):
+        if key is None: key = self.key
+        self.list.sort(key=key, reverse=reverse)
+
 class NotificationDistributor:
     def query_user(self, name):
         raise NotImplementedError
