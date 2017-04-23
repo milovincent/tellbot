@@ -687,7 +687,7 @@ class TellBot(basebot.Bot):
 
                 # Obtain list.
                 names = ['*' + i for i in distr.list_groups() if filt(i)]
-                names.sort()
+                names.sort(key=lambda x: x.lower())
 
                 if not names:
                     reply('No groups.' if filt_all else
@@ -697,7 +697,9 @@ class TellBot(basebot.Bot):
                 # Group by first character.
                 groups = []
                 for n in names:
-                    if not groups or n[:2] != groups[-1][-1][:2]:
+                    if not groups:
+                        groups.append([n])
+                    elif n[:2].lower() != groups[-1][-1][:2].lower():
                         groups.append([n])
                     else:
                         groups[-1].append(n)
