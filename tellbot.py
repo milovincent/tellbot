@@ -501,42 +501,48 @@ class TellBot(basebot.Bot):
 
     def handle_command(self, cmdline, meta):
         # Common part of the argument parsers.
-        def parse_userlist(base, groups, it, get_group=False):
-            def abort():
+        def parse_userlist(base, groups, it, grouppol='normal'):
+            def groupfirst():
                 reply('Please specify a group first.')
+                return Ellipsis, count
+            def nogroups():
+                reply('Please do not specify groups.')
                 return Ellipsis, count
             count = 0
             for arg in it:
                 if arg.startswith('@'): # Add user.
-                    if get_group: return abort()
+                    if grouppol == 'get': return groupfirst()
                     u = distr.query_user(arg[1:])
                     base.append(u)
                     groups[arg] = [u]
                     count += 1
                 elif arg.startswith('*'): # Add group.
-                    if get_group: return arg, count
+                    if grouppol == 'get': return arg, count
+                    elif grouppol == 'none': return nogroups()
                     g = distr.query_group(arg[1:])
                     base.extend(g)
                     groups[arg] = g
                     count += 1
                 elif arg.startswith('+@'): # Add user (long form).
-                    if get_group: return abort()
+                    if grouppol == 'get': return groupfirst()
                     u = distr.query_user(arg[2:])
                     base.append(u)
                     groups[arg[1:]] = [u]
                     count += 1
                 elif arg.startswith('+*'): # Add group (long form).
-                    if get_group: return abort()
+                    if grouppol == 'get': return groupfirst()
+                    elif grouppol == 'none': return nogroups()
                     g = distr.query_group(arg[2:])
                     base.extend(g)
                     groups[arg[1:]] = g
                     count += 1
                 elif arg.startswith('-@'): # Discard user.
-                    if get_group: return abort()
+                    if grouppol == 'get': return groupfirst()
                     base.discard(distr.query_user(arg[2:]))
                     count += 1
                 elif arg.startswith('-*'): # Discard group.
-                    if get_group: return abort()
+                    if grouppol == 'get': return groupfirst()
+                    elif grouppol == 'none': return nogroups()
                     base.discard_all(distr.query_group(arg[2:]))
                     count += 1
                 elif arg.startswith('--'): # Option.
@@ -703,7 +709,7 @@ class TellBot(basebot.Bot):
                 it, count = iter(cmdline[1:]), 0
                 while 1:
                     arg, cnt = parse_userlist(members, groups, it,
-                                              (groupname is None))
+                        ('get' if groupname is None else 'normal'))
                     count += cnt
                     if arg is None:
                         break
