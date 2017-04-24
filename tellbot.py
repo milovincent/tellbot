@@ -103,6 +103,10 @@ class NotificationDistributor:
         raise NotImplementedError
     def update_seen(self, user, name, time, unread):
         raise NotImplementedError
+    def query_aliases(self, base):
+        raise NotImplementedError
+    def update_aliases(self, base, users):
+        raise NotImplementedError
     def list_groups(self):
         raise NotImplementedError
     def query_group(self, name):
@@ -145,6 +149,14 @@ class NotificationDistributorMemory(NotificationDistributor):
             self.seen[user] = [name, time,
                 oldent[2] if unread is None else unread, room]
             return (unread != oldent[2])
+
+    def query_aliases(self, base):
+        with self.lock:
+            return self.aliases.get(user, ())
+
+    def update_aliases(self, base, users):
+        with self.lock:
+            self.aliases[user] = names
 
     def list_groups(self):
         with self.lock:
@@ -243,6 +255,13 @@ class NotificationDistributorSQLite(NotificationDistributor):
                                   'unread INTEGER,'
                                   'room TEXT'
                               ')')
+            # Alias table.
+            self.curs.execute('CREATE TABLE IF NOT EXISTS aliases ('
+                                  'base TEXT,'
+                                  'user TEXT,'
+                                  'name TEXT,'
+                                  'PRIMARY KEY (base, user)'
+                              ')')
             # Schema upgrades.
             self.curs.execute('PRAGMA table_info(seen);')
             seencols = set(i[1] for i in self.curs.fetchall())
@@ -282,6 +301,18 @@ class NotificationDistributorSQLite(NotificationDistributor):
                 'VALUES (?, ?, ?, ?, ?)',
                 (user, name, timestamp, unread, room))
             return (old_unread[0] != unread)
+
+    def query_aliases(self, base):
+        with self.lock:
+            self.curs.execute('SELECT user, name FROM aliases WHERE base = ? '
+                'ORDER BY _rowid_', (base,))
+            return self.curs.fetchall()
+
+    def update_aliases(self, base, names):
+        with self:
+            self.curs.execute('DELETE FROM aliases WHERE base = ?', (base,))
+            self.curs.executemany('INSERT INTO aliases VALUES (?, ?, ?)',
+                                  ((base, m, n) for m, n in names))
 
     def list_groups(self):
         with self.lock:
