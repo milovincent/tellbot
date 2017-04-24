@@ -132,6 +132,8 @@ class NotificationDistributor:
 
 class NotificationDistributorMemory(NotificationDistributor):
     def __init__(self):
+        self.aliases = {}
+        self.revaliases = {}
         self.seen = {}
         self.messages = {}
         self.deliveries = {}
@@ -139,7 +141,11 @@ class NotificationDistributorMemory(NotificationDistributor):
         self.lock = threading.RLock()
 
     def query_user(self, name):
-        return self.normalize_user(name)
+        ret = self.normalize_user(name)
+        try:
+            return (self.revaliases[ret[0]], ret[1])
+        except KeyError:
+            return ret
 
     def query_seen(self, user):
         with self.lock:
@@ -157,8 +163,14 @@ class NotificationDistributorMemory(NotificationDistributor):
             return self.aliases.get(user, ())
 
     def update_aliases(self, base, users):
+        newents = set(u[0] for u in users)
         with self.lock:
-            self.aliases[user] = names
+            for e in self.aliases.get(base, ()):
+                if e not in newents:
+                    del self.revaliases[e[0]]
+            self.aliases[base] = users
+            for u in newents:
+                self.revaliases[u] = base
 
     def list_groups(self):
         with self.lock:
@@ -283,7 +295,13 @@ class NotificationDistributorSQLite(NotificationDistributor):
                 message.get('delivered_to'), message.get('delivered'))
 
     def query_user(self, name):
-        return self.normalize_user(name)
+        ret = self.normalize_user(name)
+        with self.lock:
+            self.curs.execute('SELECT base FROM aliases WHERE user = ?',
+                              (ret[0],))
+            res = self.curs.fetchone()
+            if res: return (res[0], ret[1])
+        return ret
 
     def query_seen(self, user):
         with self.lock:
@@ -312,8 +330,8 @@ class NotificationDistributorSQLite(NotificationDistributor):
     def update_aliases(self, base, names):
         with self:
             self.curs.execute('DELETE FROM aliases WHERE base = ?', (base,))
-            self.curs.executemany('INSERT INTO aliases VALUES (?, ?, ?)',
-                                  ((base, m, n) for m, n in names))
+            self.curs.executemany('INSERT OR REPLACE INTO aliases '
+                'VALUES (?, ?, ?)', ((base, m, n) for m, n in names))
 
     def list_groups(self):
         with self.lock:
