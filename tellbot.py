@@ -97,6 +97,8 @@ class OrderedSet:
         self.list.sort(key=key, reverse=reverse)
 
 class NotificationDistributor:
+    def normalize_user(self, name):
+        return (basebot.normalize_nick(name), seminormalize_nick(name))
     def query_user(self, name):
         raise NotImplementedError
     def query_seen(self, user):
@@ -137,7 +139,7 @@ class NotificationDistributorMemory(NotificationDistributor):
         self.lock = threading.RLock()
 
     def query_user(self, name):
-        return (basebot.normalize_nick(name), seminormalize_nick(name))
+        return self.normalize_user(name)
 
     def query_seen(self, user):
         with self.lock:
@@ -282,7 +284,7 @@ class NotificationDistributorSQLite(NotificationDistributor):
                 message.get('delivered_to'), message.get('delivered'))
 
     def query_user(self, name):
-        return (basebot.normalize_nick(name), seminormalize_nick(name))
+        return self.normalize_user(name)
 
     def query_seen(self, user):
         with self.lock:
