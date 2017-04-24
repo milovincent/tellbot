@@ -260,9 +260,8 @@ class NotificationDistributorSQLite(NotificationDistributor):
             # Alias table.
             self.curs.execute('CREATE TABLE IF NOT EXISTS aliases ('
                                   'base TEXT,'
-                                  'user TEXT,'
-                                  'name TEXT,'
-                                  'PRIMARY KEY (base, user)'
+                                  'user TEXT PRIMARY KEY,'
+                                  'name TEXT'
                               ')')
             # Schema upgrades.
             self.curs.execute('PRAGMA table_info(seen);')
