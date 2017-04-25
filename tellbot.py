@@ -45,6 +45,10 @@ def format_list(l, fallback=None):
         return ', '.join(l[:-1]) + ', and ' + l[-1]
 
 class OrderedSet:
+    @classmethod
+    def firstel(cls, base=()):
+        return cls(base, operator.itemgetter(0))
+
     def __init__(self, base=(), key=lambda x: x):
         self.list = []
         self.set = set()
@@ -107,7 +111,7 @@ class NotificationDistributor:
         raise NotImplementedError
     def query_aliases(self, base):
         raise NotImplementedError
-    def update_aliases(self, base, users):
+    def update_aliases(self, base, names):
         raise NotImplementedError
     def list_groups(self):
         raise NotImplementedError
@@ -163,15 +167,20 @@ class NotificationDistributorMemory(NotificationDistributor):
         with self.lock:
             return self.aliases.get(user, [])
 
-    def update_aliases(self, base, users):
-        newents = set(u[0] for u in users)
+    def update_aliases(self, base, names):
         with self.lock:
-            for e in self.aliases.get(base, ()):
-                if e not in newents:
-                    del self.revaliases[e[0]]
-            self.aliases[base] = users
-            for u in newents:
-                self.revaliases[u] = base
+            # Collect effective new names and aliases to remove.
+            effnames, bases = OrderedSet.firstel(), set()
+            for n in names:
+                effnames.append(n)
+                effnames.extend(self.aliases.get(n[0], ()))
+                bases.add(self.revaliases.get(n[0]))
+            # Remove old alias tables.
+            for b in bases: self.aliases.pop(b, None)
+            # Create new alias table.
+            self.aliases[base] = list(effnames)
+            # Repoint individual entries.
+            for e in effnames: self.revaliases[e[0]] = base
 
     def list_groups(self):
         with self.lock:
@@ -340,9 +349,14 @@ class NotificationDistributorSQLite(NotificationDistributor):
 
     def update_aliases(self, base, names):
         with self:
-            self.curs.execute('DELETE FROM aliases WHERE base = ?', (base,))
+            effnames = OrderedSet.firstel()
+            for n in names:
+                effnames.append(n)
+                self.curs.execute('SELECT user, name FROM aliases '
+                    'WHERE base = ? ORDER BY _rowid_', (n[0],))
+                effnames.extend(self.curs.fetchall())
             self.curs.executemany('INSERT OR REPLACE INTO aliases '
-                'VALUES (?, ?, ?)', ((base, m, n) for m, n in names))
+                'VALUES (?, ?, ?)', ((base, m, n) for m, n in effnames))
 
     def list_groups(self):
         with self.lock:
@@ -655,7 +669,7 @@ class TellBot(basebot.Bot):
             if cmdline[0] in ('!tell', '!tnotify'):
                 self._log_command(cmdline)
                 # Parse arguments.
-                recipients = OrderedSet(key=operator.itemgetter(0))
+                recipients = OrderedSet.firstel()
                 groups, text = collections.OrderedDict(), None
                 it = iter(cmdline[1:])
                 while 1:
@@ -698,7 +712,7 @@ class TellBot(basebot.Bot):
                 self.send_notify(
                     distr,
                     sender,
-                    OrderedSet((recipient,), key=operator.itemgetter(0)),
+                    OrderedSet.firstel((recipient,)),
                     {'@' + recipient[0]: [recipient]},
                     meta['line'][cmdline[1].offset:],
                     reply,
@@ -723,8 +737,7 @@ class TellBot(basebot.Bot):
                     groups = {reason: [distr.query_user(reason[1:])]}
                 else:
                     groups = {reason: distr.query_group(reason[1:])}
-                recipients = OrderedSet(groups[reason],
-                                        key=operator.itemgetter(0))
+                recipients = OrderedSet.firstel(groups[reason])
 
                 # Send message.
                 self.send_notify(distr, sender, recipients, groups,
@@ -786,10 +799,9 @@ class TellBot(basebot.Bot):
                         groupname = arg[1:]
                         old_members = distr.query_group(groupname)
                         if cmdline[0] == '!tgroup':
-                            members = OrderedSet(old_members,
-                                                 key=operator.itemgetter(0))
+                            members = OrderedSet.firstel(old_members)
                         else:
-                            members = OrderedSet(key=operator.itemgetter(0))
+                            members = OrderedSet.firstel()
                         groups = {}
                     elif arg == '--ping':
                         ping = True
@@ -814,8 +826,7 @@ class TellBot(basebot.Bot):
                 # Apply changes.
                 if cmdline[0] == '!tungroup':
                     removes = members
-                    members = OrderedSet(old_members,
-                                         key=operator.itemgetter(0))
+                    members = OrderedSet.firstel(old_members)
                     members.discard_all(removes)
                 distr.update_group(groupname, tuple(members))
 
@@ -826,7 +837,7 @@ class TellBot(basebot.Bot):
             elif cmdline[0] == '!seen':
                 self._log_command(cmdline)
                 # Parse arguments.
-                users, groups = OrderedSet(key=operator.itemgetter(0)), {}
+                users, groups = OrderedSet.firstel(), {}
                 it = iter(cmdline[1:])
                 while 1:
                     arg, cnt = parse_userlist(users, groups, it)
