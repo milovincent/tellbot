@@ -138,6 +138,7 @@ class NotificationDistributorMemory(NotificationDistributor):
         self.messages = {}
         self.deliveries = {}
         self.groups = {}
+        self.revgroups = {}
         self.lock = threading.RLock()
 
     def query_user(self, name):
@@ -160,7 +161,7 @@ class NotificationDistributorMemory(NotificationDistributor):
 
     def query_aliases(self, base):
         with self.lock:
-            return self.aliases.get(user, ())
+            return self.aliases.get(user, [])
 
     def update_aliases(self, base, users):
         newents = set(u[0] for u in users)
@@ -182,7 +183,17 @@ class NotificationDistributorMemory(NotificationDistributor):
 
     def update_group(self, name, members):
         with self.lock:
+            for e in self.groups.get(name, ()):
+                g = self.revgroups[e[0]]
+                g.discard(name)
             self.groups[name] = members
+            for e in members:
+                try:
+                    g = self.revgroups[e[0]]
+                except KeyError:
+                    g = set()
+                    self.revgroups[e[0]] = g
+                g.add(name)
 
     def message_bounds(self, user):
         with self.lock:
