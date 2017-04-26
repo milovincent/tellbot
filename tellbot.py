@@ -267,7 +267,7 @@ class NotificationDistributorSQLite(NotificationDistributor):
         try:
             self.conn.commit()
         finally:
-            return self.lock.__exit__()
+            return self.lock.__exit__(None, None, None)
 
     def init(self):
         with self.lock:
