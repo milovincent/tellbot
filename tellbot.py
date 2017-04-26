@@ -165,7 +165,7 @@ class NotificationDistributorMemory(NotificationDistributor):
 
     def query_aliases(self, base):
         with self.lock:
-            return self.aliases.get(user, [])
+            return self.aliases.get(base, [])
 
     def update_aliases(self, base, names):
         with self.lock:
@@ -175,12 +175,22 @@ class NotificationDistributorMemory(NotificationDistributor):
                 effnames.append(n)
                 effnames.extend(self.aliases.get(n[0], ()))
                 bases.add(self.revaliases.get(n[0]))
+            bases = tuple(filter(None, bases))
             # Remove old alias tables.
             for b in bases: self.aliases.pop(b, None)
             # Create new alias table.
             self.aliases[base] = list(effnames)
             # Repoint individual entries.
             for e in effnames: self.revaliases[e[0]] = base
+            # Update groups.
+            groups = set().union(*(self.revgroups.get(i, ()) for i in bases))
+            for n in groups:
+                ng = OrderedSet(self.groups[n],
+                    key=lambda x: self.revaliases.get(x[0], x[0]))
+                self.groups[n] = list(ng)
+            for n in names:
+                self.revgroups.pop(n[0], None)
+            self.revgroups[base] = groups
 
     def list_groups(self):
         with self.lock:
@@ -343,8 +353,8 @@ class NotificationDistributorSQLite(NotificationDistributor):
 
     def query_aliases(self, base):
         with self.lock:
-            self.curs.execute('SELECT user, name FROM aliases WHERE base = ? '
-                'ORDER BY _rowid_', (base,))
+            self.curs.execute('SELECT user, name FROM aliases '
+                'WHERE base = ? ORDER BY _rowid_', (base,))
             return self.curs.fetchall()
 
     def update_aliases(self, base, names):
@@ -357,6 +367,11 @@ class NotificationDistributorSQLite(NotificationDistributor):
                 effnames.extend(self.curs.fetchall())
             self.curs.executemany('INSERT OR REPLACE INTO aliases '
                 'VALUES (?, ?, ?)', ((base, m, n) for m, n in effnames))
+            for n in names:
+                self.curs.execute('UPDATE OR IGNORE groups SET member = ? '
+                    'WHERE member = ?', (base, n[0]))
+                self.curs.execute('DELETE FROM groups WHERE member = ?',
+                                  (n[0],))
 
     def list_groups(self):
         with self.lock:
