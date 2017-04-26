@@ -111,7 +111,7 @@ class NotificationDistributor:
         raise NotImplementedError
     def query_aliases(self, base):
         raise NotImplementedError
-    def update_aliases(self, base, names):
+    def add_aliases(self, base, names):
         raise NotImplementedError
     def list_groups(self):
         raise NotImplementedError
@@ -167,7 +167,7 @@ class NotificationDistributorMemory(NotificationDistributor):
         with self.lock:
             return self.aliases.get(base, [])
 
-    def update_aliases(self, base, names):
+    def add_aliases(self, base, names):
         with self.lock:
             # Collect effective new names and aliases to remove.
             effnames, bases = OrderedSet.firstel(), set()
@@ -357,7 +357,7 @@ class NotificationDistributorSQLite(NotificationDistributor):
                 'WHERE base = ? ORDER BY _rowid_', (base,))
             return self.curs.fetchall()
 
-    def update_aliases(self, base, names):
+    def add_aliases(self, base, names):
         with self:
             effnames = OrderedSet.firstel()
             for n in names:
