@@ -185,14 +185,15 @@ class NotificationDistributorMemory(NotificationDistributor):
             self.aliases[base] = list(effnames)
             # Repoint individual entries.
             for e in effnames: self.revaliases[e[0]] = base
-            # Update groups.
+            # Rewrite groups.
             groups = set().union(*(self.revgroups.get(i, ()) for i in bases))
             for n in groups:
                 ng = OrderedSet(self.groups[n],
                     key=lambda x: self.revaliases.get(x[0], x[0]))
-                self.groups[n] = list(ng)
-            for n in names:
-                self.revgroups.pop(n[0], None)
+                self.groups[n] = [(base, el[1]) if el[0] in bases else el
+                                  for el in ng]
+            for b in bases:
+                self.revgroups.pop(b, None)
             self.revgroups[base] = groups
             # Update seen.
             entry, unread = None, 0
