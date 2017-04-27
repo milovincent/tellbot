@@ -394,8 +394,8 @@ class NotificationDistributorSQLite(NotificationDistributor):
                     entry = s
                 self.curs.execute('DELETE FROM seen WHERE user = ?', (n[0],))
             if entry:
-                self.curs.execute('INSERT INTO seen VALUES (?, ?, ?, ?)',
-                    (entry[0], entry[1], unread, entry[2]))
+                self.curs.execute('INSERT INTO seen VALUES (?, ?, ?, ?, ?)',
+                    (base, entry[0], entry[1], unread, entry[3]))
 
     def list_groups(self):
         with self.lock:
