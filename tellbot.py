@@ -194,8 +194,7 @@ class NotificationDistributorMemory(NotificationDistributor):
                 self.revgroups.pop(n[0], None)
             self.revgroups[base] = groups
             # Update seen.
-            unread = 0
-            entry = None
+            entry, unread = None, 0
             for b in bases:
                 s = self.seen.pop(b, None)
                 if not s: continue
