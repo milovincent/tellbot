@@ -113,6 +113,8 @@ class NotificationDistributor:
         raise NotImplementedError
     def add_aliases(self, base, names):
         raise NotImplementedError
+    def remove_aliases(self, base, names):
+        raise NotImplementedError
     def list_groups(self):
         raise NotImplementedError
     def query_group(self, name):
@@ -169,7 +171,7 @@ class NotificationDistributorMemory(NotificationDistributor):
 
     def add_aliases(self, base, names):
         with self.lock:
-            # Collect effective new names and aliases to remove.
+            # Collect effective new names.
             effnames, bases = OrderedSet.firstel(), set()
             for n in names:
                 effnames.append(n)
@@ -192,7 +194,7 @@ class NotificationDistributorMemory(NotificationDistributor):
                 self.revgroups.pop(n[0], None)
             self.revgroups[base] = groups
             # Update seen.
-            unreaad = 0
+            unread = 0
             entry = None
             for b in bases:
                 s = self.seen.pop(b, None)
@@ -202,6 +204,17 @@ class NotificationDistributorMemory(NotificationDistributor):
                     entry = s
             if entry:
                 self.seen[base] = [entry[0], entry[1], unread, entry[3]]
+
+    def remove_aliases(self, base, names):
+        with self.lock:
+            if base not in self.aliases: return
+            rms = set(n[0] for n in names)
+            newnames, removed = [], []
+            for el in self.aliases[base]:
+                (removed if el[0] in rms else newnames).append(el)
+            self.aliases[base] = newnames
+            for el in removed:
+                self.revaliases.pop(el[0], None)
 
     def list_groups(self):
         with self.lock:
@@ -396,6 +409,11 @@ class NotificationDistributorSQLite(NotificationDistributor):
             if entry:
                 self.curs.execute('INSERT INTO seen VALUES (?, ?, ?, ?, ?)',
                     (base, entry[0], entry[1], unread, entry[3]))
+
+    def remove_aliases(self, base, names):
+        with self:
+            self.curs.executemany('DELETE FROM aliases WHERE base = ? '
+                'AND user = ?', ((base, n[0]) for n in names))
 
     def list_groups(self):
         with self.lock:
