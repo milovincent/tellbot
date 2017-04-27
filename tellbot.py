@@ -175,9 +175,10 @@ class NotificationDistributorMemory(NotificationDistributor):
             effnames, bases = OrderedSet.firstel(), set()
             for n in names:
                 effnames.append(n)
-                effnames.extend(self.aliases.get(n[0], ()))
-                bases.add(self.revaliases.get(n[0]))
-            bases = tuple(filter(None, bases))
+                bn = self.revaliases.get(n[0])
+                if not bn: continue
+                effnames.extend(self.aliases[bn])
+                bases.add(bn)
             # Remove old alias tables.
             for b in bases: self.aliases.pop(b, None)
             # Create new alias table.
@@ -382,21 +383,28 @@ class NotificationDistributorSQLite(NotificationDistributor):
 
     def add_aliases(self, base, names):
         with self:
-            effnames = OrderedSet.firstel()
+            qnames, effnames = OrderedSet.firstel(), OrderedSet.firstel()
+            for n in names:
+                self.curs.execute('SELECT base, user FROM aliases '
+                    'WHERE user = ?', (n[0],))
+                r = self.curs.fetchone()
+                qnames.append(r if r else n)
             for n in names:
                 effnames.append(n)
                 self.curs.execute('SELECT user, name FROM aliases '
-                    'WHERE base = ? ORDER BY _rowid_', (n[0],))
+                    'WHERE base = (SELECT base FROM aliases WHERE user = ?) '
+                    'ORDER BY _rowid_',
+                    (n[0],))
                 effnames.extend(self.curs.fetchall())
             self.curs.executemany('INSERT OR REPLACE INTO aliases '
                 'VALUES (?, ?, ?)', ((base, m, n) for m, n in effnames))
-            for n in names:
+            for n in qnames:
                 self.curs.execute('UPDATE OR IGNORE groups SET member = ? '
                     'WHERE member = ?', (base, n[0]))
                 self.curs.execute('DELETE FROM groups WHERE member = ?',
                                   (n[0],))
             entry, unread = None, 0
-            for n in names:
+            for n in qnames:
                 self.curs.execute('SELECT name, timestamp, unread, room '
                     'FROM seen WHERE user = ?', (n[0],))
                 s = self.curs.fetchone()
