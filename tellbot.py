@@ -100,6 +100,49 @@ class OrderedSet:
         if key is None: key = self.key
         self.list.sort(key=key, reverse=reverse)
 
+class DBLock:
+    class Committer:
+        def __init__(self, parent):
+            self.parent = parent
+
+        def __enter__(self):
+            self.parent.acquire(commit=True)
+
+        def __exit__(self, t, v, tb):
+            self.parent.release()
+
+    def __init__(self, conn=None):
+        self.lock = threading.RLock()
+        self.conn = conn
+        self.commit = False
+        self.counter = 0
+        self.committing = self.Committer(self)
+
+    def __enter__(self):
+        self.acquire()
+
+    def __exit__(self, t, v, tb):
+        self.release()
+
+    def acquire(self, blocking=True, commit=False):
+        ret = self.lock.acquire(blocking)
+        if commit: self.commit = True
+        print ('[acquire] %r %r' % (self.counter, self.commit))
+        self.counter += 1
+        return ret
+
+    def release(self):
+        if not self.lock._is_owned():
+            raise RuntimeError('Trying to release foreign lock!')
+        self.counter -= 1
+        print ('[released] %r %r' % (self.counter, self.commit))
+        if self.counter == 0 and self.commit:
+            if self.conn:
+                print ('[committing]')
+                self.conn.commit()
+            self.commit = False
+        return self.lock.release()
+
 class NotificationDistributor:
     def normalize_user(self, name):
         return (basebot.normalize_nick(name), seminormalize_nick(name))
@@ -280,25 +323,17 @@ class NotificationDistributorMemory(NotificationDistributor):
 class NotificationDistributorSQLite(NotificationDistributor):
     def __init__(self, filename):
         self.filename = filename
-        self.lock = threading.RLock()
+        self.lock = DBLock(None)
         self.conn = None
         self.curs = None
         self.init()
 
-    def __enter__(self):
-        return self.lock.__enter__()
-
-    def __exit__(self, *args):
-        try:
-            self.conn.commit()
-        finally:
-            return self.lock.__exit__(None, None, None)
-
     def init(self):
-        with self.lock:
+        with self.lock.committing:
             self.conn = sqlite3.connect(self.filename, isolation_level='',
                                         check_same_thread=False)
             self.curs = self.conn.cursor()
+            self.lock.conn = self.conn
             # Message table.
             self.curs.execute('CREATE TABLE IF NOT EXISTS messages ('
                                   'sender TEXT,'
@@ -365,7 +400,7 @@ class NotificationDistributorSQLite(NotificationDistributor):
             return self.curs.fetchone()
 
     def update_seen(self, user, name, timestamp, unread, room):
-        with self:
+        with self.lock.committing:
             self.curs.execute('SELECT unread FROM seen WHERE user = ?',
                               (user,))
             old_unread = self.curs.fetchone()
@@ -383,7 +418,7 @@ class NotificationDistributorSQLite(NotificationDistributor):
             return self.curs.fetchall()
 
     def add_aliases(self, base, names):
-        with self:
+        with self.lock.committing:
             qnames, effnames = OrderedSet.firstel(), OrderedSet.firstel()
             for n in names:
                 self.curs.execute('SELECT base, user FROM aliases '
@@ -419,7 +454,7 @@ class NotificationDistributorSQLite(NotificationDistributor):
                     (base, entry[0], entry[1], unread, entry[3]))
 
     def remove_aliases(self, base, names):
-        with self:
+        with self.lock.committing:
             self.curs.executemany('DELETE FROM aliases WHERE base = ? '
                 'AND user = ?', ((base, n[0]) for n in names))
 
@@ -435,7 +470,7 @@ class NotificationDistributorSQLite(NotificationDistributor):
             return self.curs.fetchall()
 
     def update_group(self, name, members):
-        with self:
+        with self.lock.committing:
             self.curs.execute('DELETE FROM groups WHERE groupname = ?',
                               (name,))
             self.curs.executemany('INSERT INTO groups VALUES (?, ?, ?)',
@@ -457,7 +492,7 @@ class NotificationDistributorSQLite(NotificationDistributor):
             return self._unwrap_messages(self.curs.fetchall())
 
     def pop_messages(self, user, stale=False):
-        with self:
+        with self.lock.committing:
             query = ('SELECT _rowid_, sender, reason, text, '
                 'timestamp FROM messages WHERE recipient = ? '
                 '%s ORDER BY timestamp') % (
@@ -469,7 +504,7 @@ class NotificationDistributorSQLite(NotificationDistributor):
 
     def add_message(self, user, message):
         message['to'] = user
-        with self:
+        with self.lock.committing:
             self.curs.execute('INSERT INTO messages '
                 'VALUES (?, ?, ?, ?, ?, ?, ?)',
                 self._wrap_message(message)[1:])
@@ -483,14 +518,14 @@ class NotificationDistributorSQLite(NotificationDistributor):
             return self._unwrap_message(res)
 
     def add_delivery(self, msg, msgid, timestamp):
-        with self:
+        with self.lock.committing:
             self.curs.execute('UPDATE messages SET delivered_to = ?, '
                 'delivered = ? WHERE _rowid_ = ?', (msgid, timestamp,
                                                     msg['id']))
 
     def gc(self):
         deadline = time.time() - REPLY_TIMEOUT
-        with self:
+        with self.lock.committing:
             self.curs.execute('DELETE FROM messages WHERE delivered < ?',
                               (deadline,))
 
