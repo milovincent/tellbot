@@ -158,6 +158,8 @@ class NotificationDistributor:
         raise NotImplementedError
     def remove_aliases(self, base, names):
         raise NotImplementedError
+    def update_aliases(self, base, names):
+        raise NotImplementedError
     def list_groups(self):
         raise NotImplementedError
     def query_group(self, name):
@@ -259,6 +261,16 @@ class NotificationDistributorMemory(NotificationDistributor):
             self.aliases[base] = newnames
             for el in removed:
                 self.revaliases.pop(el[0], None)
+
+    def update_aliases(self, base, names):
+        with self.lock:
+            oldnames = OrderedSet.firstel(self.query_aliases(base))
+            removes = oldnames.copy()
+            removes.remove_all(names)
+            adds = OrderedSet.firstel(names)
+            adds.remove_all(oldnames)
+            self.remove_aliases(base, removes)
+            self.add_aliases(base, adds)
 
     def list_groups(self):
         with self.lock:
@@ -457,6 +469,16 @@ class NotificationDistributorSQLite(NotificationDistributor):
         with self.lock.committing:
             self.curs.executemany('DELETE FROM aliases WHERE base = ? '
                 'AND user = ?', ((base, n[0]) for n in names))
+
+    def update_aliases(self, base, names):
+        with self.lock.committing:
+            oldnames = OrderedSet.firstel(self.query_aliases(base))
+            removes = oldnames.copy()
+            removes.remove_all(names)
+            adds = OrderedSet.firstel(names)
+            adds.remove_all(oldnames)
+            self.remove_aliases(base, removes)
+            self.add_aliases(base, adds)
 
     def list_groups(self):
         with self.lock:
