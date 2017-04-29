@@ -1075,10 +1075,10 @@ class TellBot(basebot.Bot):
                         return
                     elif arg.startswith('@'):
                         base = distr.query_user(arg[1:])
-                        old_names = distr.query_aliases(base[0])
+                        old_names = OrderedSet.firstel((base,))
+                        old_names.extend(distr.query_aliases(base[0]))
                         names = OrderedSet.firstel()
                         if cmdline[0] == '!alias':
-                            names.append(base)
                             names.extend(old_names)
                     elif arg == '--ping':
                         ping = True
