@@ -144,6 +144,10 @@ class DBLock:
         return self.lock.release()
 
 class NotificationDistributor:
+    def __enter__(self):
+        raise NotImplementedError
+    def __exit__(self, t, v, tb):
+        raise NotImplementedError
     def normalize_user(self, name):
         return (basebot.normalize_nick(name), seminormalize_nick(name))
     def query_user(self, name):
@@ -191,6 +195,11 @@ class NotificationDistributorMemory(NotificationDistributor):
         self.groups = {}
         self.revgroups = {}
         self.lock = threading.RLock()
+
+    def __enter__(self):
+        self.lock.__enter__()
+    def __exit__(self, t, v, tb):
+        self.lock.__exit__(t, v, tb)
 
     def query_user(self, name):
         ret = self.normalize_user(name)
@@ -339,6 +348,11 @@ class NotificationDistributorSQLite(NotificationDistributor):
         self.conn = None
         self.curs = None
         self.init()
+
+    def __enter__(self):
+        self.lock.__enter__()
+    def __exit__(self, t, v, tb):
+        self.lock.__exit__(t, v, tb)
 
     def init(self):
         with self.lock.committing:
@@ -787,6 +801,9 @@ class TellBot(basebot.Bot):
         # Ensure replies are delivered.
         try:
 
+            # Lock database.
+            distr.__enter__()
+
             # Send a message.
             if cmdline[0] in ('!tell', '!tnotify'):
                 self._log_command(cmdline)
@@ -1028,8 +1045,9 @@ class TellBot(basebot.Bot):
                 # Deliver messages.
                 self.deliver_notifies(distr, sender, meta['reply'], stale)
 
-        # Deliver replies.
+        # Unlock database, deliver replies.
         finally:
+            distr.__exit__(None, None, None)
             flush()
 
 class GCThread(threading.Thread):
