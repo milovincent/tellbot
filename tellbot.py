@@ -90,7 +90,7 @@ class OrderedSet:
         key = self.key(item)
         if key in self.set:
             self.set.remove(key)
-            self.list.remove(item)
+            self.list[:] = [i for i in self.list if self.key(i) != key]
 
     def discard_all(self, items):
         for item in items:
@@ -269,13 +269,10 @@ class NotificationDistributorMemory(NotificationDistributor):
 
     def update_aliases(self, base, names):
         with self.lock:
-            oldnames = OrderedSet.firstel(self.query_aliases(base))
-            removes = oldnames.copy()
-            removes.remove_all(names)
-            adds = OrderedSet.firstel(names)
-            adds.remove_all(oldnames)
+            removes = OrderedSet.firstel(self.query_aliases(base))
+            removes.discard_all(names)
             self.remove_aliases(base, removes)
-            self.add_aliases(base, adds)
+            self.add_aliases(base, names)
 
     def list_groups(self):
         with self.lock:
@@ -462,7 +459,7 @@ class NotificationDistributorSQLite(NotificationDistributor):
                 self.curs.execute('DELETE FROM groups WHERE member = ?',
                                   (n[0],))
             entry, unread = None, 0
-            for n in qnames:
+            for n in effnames:
                 self.curs.execute('SELECT name, timestamp, unread, room '
                     'FROM seen WHERE user = ?', (n[0],))
                 s = self.curs.fetchone()
@@ -482,13 +479,10 @@ class NotificationDistributorSQLite(NotificationDistributor):
 
     def update_aliases(self, base, names):
         with self.lock.committing:
-            oldnames = OrderedSet.firstel(self.query_aliases(base))
-            removes = oldnames.copy()
-            removes.remove_all(names)
-            adds = OrderedSet.firstel(names)
-            adds.remove_all(oldnames)
+            removes = OrderedSet.firstel(self.query_aliases(base))
+            removes.discard_all(names)
             self.remove_aliases(base, removes)
-            self.add_aliases(base, adds)
+            self.add_aliases(base, names)
 
     def list_groups(self):
         with self.lock:
@@ -713,7 +707,7 @@ class TellBot(basebot.Bot):
     def handle_command(self, cmdline, meta):
         # Common part of the argument parsers.
         def parse_userlist(base, groups, it, userpol='normal',
-                           grouppol='normal'):
+                           grouppol='normal', query=True):
             def check_policy(t, x):
                 if t == 'user':
                     policy, othpolicy, ot = userpol, grouppol, 'group'
@@ -730,12 +724,13 @@ class TellBot(basebot.Bot):
                 elif othpolicy == 'get':
                     reply('Please specify a ' + ot + ' first.')
                     return Ellipsis, count
+            q = distr.query_user if query else distr.normalize_user
             count = 0
             for arg in it:
                 if arg.startswith('@'): # Add user.
                     r = check_policy('user', False)
                     if r: return r
-                    u = distr.query_user(arg[1:])
+                    u = q(arg[1:])
                     base.append(u)
                     groups[arg] = [u]
                     count += 1
@@ -749,7 +744,7 @@ class TellBot(basebot.Bot):
                 elif arg.startswith('+@'): # Add user (long form).
                     r = check_policy('user', True)
                     if r: return r
-                    u = distr.query_user(arg[2:])
+                    u = q(arg[2:])
                     base.append(u)
                     groups[arg[1:]] = [u]
                     count += 1
@@ -763,7 +758,7 @@ class TellBot(basebot.Bot):
                 elif arg.startswith('-@'): # Discard user.
                     r = check_policy('user', True)
                     if r: return r
-                    base.discard(distr.query_user(arg[2:]))
+                    base.discard(q(arg[2:]))
                     count += 1
                 elif arg.startswith('-*'): # Discard group.
                     r = check_policy('group', True)
@@ -790,6 +785,14 @@ class TellBot(basebot.Bot):
                 ' (%s)' % len(members) if members else '')
             tr = lambda x: format_nick(x, ping)
             lst = format_list(map(tr, members), '-none-')
+            reply(head + lst)
+
+        # Reply with the users from a given alias set.
+        def display_aliases(base, names, ping, comment):
+            head = 'Aliases of @%s%s%s: ' % (base[1],
+                ' ' if comment else '', comment)
+            tr = lambda x: format_nick(x, ping)
+            lst = format_list(map(tr, names), '-none-')
             reply(head + lst)
 
         # Accumulate a reply.
@@ -1054,6 +1057,59 @@ class TellBot(basebot.Bot):
 
                 # Deliver messages.
                 self.deliver_notifies(distr, sender, meta['reply'], stale)
+
+            # Add/remove aliases.
+            elif cmdline[0] in ('!alias', '!unalias'):
+                self._log_command(cmdline)
+                # Parse arguments.
+                base, names, ping = None, None, False
+                it, count = iter(cmdline[1:]), 0
+                while 1:
+                    arg, cnt = parse_userlist(names, {}, it,
+                        userpol=('get' if base is None else 'normal'),
+                        grouppol='none', query=False)
+                    count += cnt
+                    if arg is None:
+                        break
+                    elif arg is Ellipsis:
+                        return
+                    elif arg.startswith('@'):
+                        base = distr.query_user(arg[1:])
+                        old_names = distr.query_aliases(base[0])
+                        names = OrderedSet.firstel()
+                        if cmdline[0] == '!alias':
+                            names.append(base)
+                            names.extend(old_names)
+                    elif arg == '--ping':
+                        ping = True
+                    elif arg.startswith('--') and arg != '--':
+                        reply('Unknown option %s.' % arg)
+                        return
+                    else:
+                        reply('Please specify alias changes only.')
+                        return
+                if base is None:
+                    reply('Please specify a nick to show or change aliases '
+                        'of.')
+                    return
+                elif cmdline[0] == '!unalias' and count == 0:
+                    reply('Nothing to be done.')
+                    return
+
+                # Display old names.
+                display_aliases(base, old_names, ping,
+                                '' if count == 0 else 'before')
+                if count == 0: return
+
+                # Apply changes.
+                if cmdline[0] == '!unalias':
+                    removes = names
+                    names = OrderedSet.firstel(old_names)
+                    names.discard_all(removes)
+                distr.update_aliases(base[0], tuple(names))
+
+                # Display new membership.
+                display_aliases(base, names, ping, 'after')
 
         # Unlock database, deliver replies.
         finally:
