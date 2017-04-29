@@ -127,7 +127,6 @@ class DBLock:
     def acquire(self, blocking=True, commit=False):
         ret = self.lock.acquire(blocking)
         if commit: self.commit = True
-        print ('[acquire] %r %r' % (self.counter, self.commit))
         self.counter += 1
         return ret
 
@@ -135,11 +134,8 @@ class DBLock:
         if not self.lock._is_owned():
             raise RuntimeError('Trying to release foreign lock!')
         self.counter -= 1
-        print ('[released] %r %r' % (self.counter, self.commit))
         if self.counter == 0 and self.commit:
-            if self.conn:
-                print ('[committing]')
-                self.conn.commit()
+            if self.conn: self.conn.commit()
             self.commit = False
         return self.lock.release()
 
