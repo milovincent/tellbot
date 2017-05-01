@@ -152,14 +152,6 @@ class NotificationDistributor:
         raise NotImplementedError
     def update_seen(self, user, name, time, unread):
         raise NotImplementedError
-    def query_aliases(self, base):
-        raise NotImplementedError
-    def add_aliases(self, base, names):
-        raise NotImplementedError
-    def remove_aliases(self, base, names):
-        raise NotImplementedError
-    def update_aliases(self, base, names):
-        raise NotImplementedError
     def list_groups(self):
         raise NotImplementedError
     def query_group(self, name):
@@ -214,65 +206,6 @@ class NotificationDistributorMemory(NotificationDistributor):
             self.seen[user] = [name, time,
                 oldent[2] if unread is None else unread, room]
             return (unread != oldent[2])
-
-    def query_aliases(self, base):
-        with self.lock:
-            return self.aliases.get(base, [])
-
-    def add_aliases(self, base, names):
-        with self.lock:
-            # Collect effective new names.
-            effnames, bases = OrderedSet.firstel(), set()
-            for n in names:
-                effnames.append(n)
-                bn = self.revaliases.get(n[0])
-                if not bn: continue
-                effnames.extend(self.aliases[bn])
-                bases.add(bn)
-            # Remove old alias tables.
-            for b in bases: self.aliases.pop(b, None)
-            # Create new alias table.
-            self.aliases[base] = list(effnames)
-            # Repoint individual entries.
-            for e in effnames: self.revaliases[e[0]] = base
-            # Rewrite groups.
-            groups = set().union(*(self.revgroups.get(i, ()) for i in bases))
-            for n in groups:
-                ng = OrderedSet(self.groups[n],
-                    key=lambda x: self.revaliases.get(x[0], x[0]))
-                self.groups[n] = [(base, el[1]) if el[0] in bases else el
-                                  for el in ng]
-            for b in bases:
-                self.revgroups.pop(b, None)
-            self.revgroups[base] = groups
-            # Update seen.
-            entry, unread = None, 0
-            for b in bases:
-                s = self.seen.pop(b, None)
-                if not s: continue
-                unread += s[2]
-                if entry is None or s[1] > entry[1]:
-                    entry = s
-            if entry:
-                self.seen[base] = [entry[0], entry[1], unread, entry[3]]
-
-    def remove_aliases(self, base, names):
-        with self.lock:
-            if base not in self.aliases: return
-            rms = set(n[0] for n in names)
-            newnames, removed = [], []
-            for el in self.aliases[base]:
-                (removed if el[0] in rms else newnames).append(el)
-            self.aliases[base] = newnames
-            for el in removed:
-                self.revaliases.pop(el[0], None)
-
-    def update_aliases(self, base, names):
-        with self.lock:
-            removes = OrderedSet.firstel(self.query_aliases(base))
-            removes.discard_all(names)
-            self.remove_aliases(base, removes)
-            self.add_aliases(base, names)
 
     def list_groups(self):
         with self.lock:
@@ -429,60 +362,6 @@ class NotificationDistributorSQLite(NotificationDistributor):
                 'VALUES (?, ?, ?, ?, ?)',
                 (user, name, timestamp, unread, room))
             return (old_unread[0] != unread)
-
-    def query_aliases(self, base):
-        with self.lock:
-            self.curs.execute('SELECT user, name FROM aliases '
-                'WHERE base = ? ORDER BY _rowid_', (base,))
-            return self.curs.fetchall()
-
-    def add_aliases(self, base, names):
-        with self.lock.committing:
-            qnames, effnames = OrderedSet.firstel(), OrderedSet.firstel()
-            for n in names:
-                self.curs.execute('SELECT base, user FROM aliases '
-                    'WHERE user = ?', (n[0],))
-                r = self.curs.fetchone()
-                qnames.append(r if r else n)
-            for n in names:
-                effnames.append(n)
-                self.curs.execute('SELECT user, name FROM aliases '
-                    'WHERE base = (SELECT base FROM aliases WHERE user = ?) '
-                    'ORDER BY _rowid_',
-                    (n[0],))
-                effnames.extend(self.curs.fetchall())
-            self.curs.executemany('INSERT OR REPLACE INTO aliases '
-                'VALUES (?, ?, ?)', ((base, m, n) for m, n in effnames))
-            for n in qnames:
-                self.curs.execute('UPDATE OR IGNORE groups SET member = ? '
-                    'WHERE member = ?', (base, n[0]))
-                self.curs.execute('DELETE FROM groups WHERE member = ?',
-                                  (n[0],))
-            entry, unread = None, 0
-            for n in effnames:
-                self.curs.execute('SELECT name, timestamp, unread, room '
-                    'FROM seen WHERE user = ?', (n[0],))
-                s = self.curs.fetchone()
-                if not s: continue
-                unread += s[2]
-                if entry is None or s[1] > entry[1]:
-                    entry = s
-                self.curs.execute('DELETE FROM seen WHERE user = ?', (n[0],))
-            if entry:
-                self.curs.execute('INSERT INTO seen VALUES (?, ?, ?, ?, ?)',
-                    (base, entry[0], entry[1], unread, entry[3]))
-
-    def remove_aliases(self, base, names):
-        with self.lock.committing:
-            self.curs.executemany('DELETE FROM aliases WHERE base = ? '
-                'AND user = ?', ((base, n[0]) for n in names))
-
-    def update_aliases(self, base, names):
-        with self.lock.committing:
-            removes = OrderedSet.firstel(self.query_aliases(base))
-            removes.discard_all(names)
-            self.remove_aliases(base, removes)
-            self.add_aliases(base, names)
 
     def list_groups(self):
         with self.lock:
@@ -787,14 +666,6 @@ class TellBot(basebot.Bot):
             lst = format_list(map(tr, members), '-none-')
             reply(head + lst)
 
-        # Reply with the users from a given alias set.
-        def display_aliases(base, names, ping, comment):
-            head = 'Aliases of @%s%s%s: ' % (base[1],
-                ' ' if comment else '', comment)
-            tr = lambda x: format_nick(x, ping)
-            lst = format_list(map(tr, names), '-none-')
-            reply(head + lst)
-
         # Accumulate a reply.
         def reply(msg):
             replybuf.append(msg)
@@ -1057,59 +928,6 @@ class TellBot(basebot.Bot):
 
                 # Deliver messages.
                 self.deliver_notifies(distr, sender, meta['reply'], stale)
-
-            # Add/remove aliases.
-            elif cmdline[0] in ('!alias', '!unalias'):
-                self._log_command(cmdline)
-                # Parse arguments.
-                base, names, ping = None, None, False
-                it, count = iter(cmdline[1:]), 0
-                while 1:
-                    arg, cnt = parse_userlist(names, {}, it,
-                        userpol=('get' if base is None else 'normal'),
-                        grouppol='none', query=False)
-                    count += cnt
-                    if arg is None:
-                        break
-                    elif arg is Ellipsis:
-                        return
-                    elif arg.startswith('@'):
-                        base = distr.query_user(arg[1:])
-                        old_names = OrderedSet.firstel((base,))
-                        old_names.extend(distr.query_aliases(base[0]))
-                        names = OrderedSet.firstel()
-                        if cmdline[0] == '!alias':
-                            names.extend(old_names)
-                    elif arg == '--ping':
-                        ping = True
-                    elif arg.startswith('--') and arg != '--':
-                        reply('Unknown option %s.' % arg)
-                        return
-                    else:
-                        reply('Please specify alias changes only.')
-                        return
-                if base is None:
-                    reply('Please specify a nick to show or change aliases '
-                        'of.')
-                    return
-                elif cmdline[0] == '!unalias' and count == 0:
-                    reply('Nothing to be done.')
-                    return
-
-                # Display old names.
-                display_aliases(base, old_names, ping,
-                                '' if count == 0 else 'before')
-                if count == 0: return
-
-                # Apply changes.
-                if cmdline[0] == '!unalias':
-                    removes = names
-                    names = OrderedSet.firstel(old_names)
-                    names.discard_all(removes)
-                distr.update_aliases(base[0], tuple(names))
-
-                # Display new membership.
-                display_aliases(base, names, ping, 'after')
 
         # Unlock database, deliver replies.
         finally:
