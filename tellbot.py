@@ -148,6 +148,10 @@ class NotificationDistributor:
         return (basebot.normalize_nick(name), seminormalize_nick(name))
     def query_user(self, name):
         raise NotImplementedError
+    def query_aliases(self, user):
+        raise NotImplementedError
+    def update_aliases(self, base, names):
+        raise NotImplementedError
     def query_seen(self, user):
         raise NotImplementedError
     def update_seen(self, user, name, time, unread):
@@ -195,6 +199,20 @@ class NotificationDistributorMemory(NotificationDistributor):
             return (self.revaliases[ret[0]], ret[1])
         except KeyError:
             return ret
+
+    def query_aliases(self, base):
+        with self.lock:
+            return self.aliases.get(base, [])
+
+    def update_aliases(self, base, names):
+        if base not in (n[0] for n in names):
+            raise ValueError('Alias set base is not an alias')
+        with self.lock:
+            for el in self.aliases.get(base, ()):
+                self.revaliases.pop(el[0], None)
+            self.aliases[base] = names
+            for el in names:
+                self.revaliases[el[0]] = base
 
     def query_seen(self, user):
         with self.lock:
@@ -344,6 +362,19 @@ class NotificationDistributorSQLite(NotificationDistributor):
             res = self.curs.fetchone()
             if res: return (res[0], ret[1])
         return ret
+
+    def query_aliases(self, base):
+        with self.lock:
+            self.curs.execute('SELECT user, name FROM aliases WHERE base = ?',
+                              (base,))
+            return self.curs.fetchall()
+
+    def update_aliases(self, base, names):
+        if base not in (n[0] for n in names):
+            raise ValueError('Alias set base is not an alias')
+        with self.lock.committing:
+            self.curs.executemany('INSERT OR REPLACE INTO aliases '
+                'VALUES (?, ?, ?)', ((base, n, m) for n, m in names))
 
     def query_seen(self, user):
         with self.lock:
