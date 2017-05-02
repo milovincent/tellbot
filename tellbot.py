@@ -45,6 +45,15 @@ def format_list(l, fallback=None):
         return ', '.join(l[:-1]) + ', and ' + l[-1]
 
 class OrderedSet:
+    @staticmethod
+    def deduplicate(inpt, key=lambda x: x, map=lambda x: x):
+        seen = set()
+        for item in inpt:
+            k = key(item)
+            if k not in seen:
+                yield map(item)
+                seen.add(k)
+
     @classmethod
     def firstel(cls, base=()):
         return cls(base, operator.itemgetter(0))
@@ -231,7 +240,8 @@ class NotificationDistributorMemory(NotificationDistributor):
 
     def query_group(self, name):
         with self.lock:
-            return self.groups.get(name, [])
+            return list(OrderedSet.deduplicate(self.groups.get(name, []),
+                key=lambda x: self.revaliases.get(x[0], x[0])))
 
     def update_group(self, name, members):
         with self.lock:
@@ -401,9 +411,11 @@ class NotificationDistributorSQLite(NotificationDistributor):
 
     def query_group(self, name):
         with self.lock:
-            self.curs.execute('SELECT member, name FROM groups '
-                'WHERE groupname = ? ORDER BY _rowid_', (name,))
-            return self.curs.fetchall()
+            self.curs.execute('SELECT base, member, groups.name FROM groups '
+                'LEFT JOIN aliases ON member = user WHERE groupname = ? '
+                'ORDER BY groups._rowid_', (name,))
+            return list(OrderedSet.deduplicate(self.curs.fetchall(),
+                key=lambda x: x[0] or x[1], map=lambda x: x[1:]))
 
     def update_group(self, name, members):
         with self.lock.committing:
