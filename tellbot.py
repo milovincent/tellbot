@@ -167,7 +167,7 @@ class NotificationDistributor:
         raise NotImplementedError
     def list_groups(self):
         raise NotImplementedError
-    def query_group(self, name):
+    def query_group(self, name, raw=False):
         raise NotImplementedError
     def update_group(self, name, members):
         raise NotImplementedError
@@ -238,8 +238,9 @@ class NotificationDistributorMemory(NotificationDistributor):
         with self.lock:
             return list(self.groups)
 
-    def query_group(self, name):
+    def query_group(self, name, raw=False):
         with self.lock:
+            if raw: return self.groups.get(name, [])
             return list(OrderedSet.deduplicate(self.groups.get(name, []),
                 key=lambda x: self.revaliases.get(x[0], x[0])))
 
@@ -409,11 +410,12 @@ class NotificationDistributorSQLite(NotificationDistributor):
             self.curs.execute('SELECT DISTINCT groupname FROM groups')
             return list(i[0] for i in self.curs.fetchall())
 
-    def query_group(self, name):
+    def query_group(self, name, raw=False):
         with self.lock:
             self.curs.execute('SELECT base, member, groups.name FROM groups '
                 'LEFT JOIN aliases ON member = user WHERE groupname = ? '
                 'ORDER BY groups._rowid_', (name,))
+            if raw: return [x[1:] for x in self.curs.fetchall()]
             return list(OrderedSet.deduplicate(self.curs.fetchall(),
                 key=lambda x: x[0] or x[1], map=lambda x: x[1:]))
 
