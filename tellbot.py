@@ -384,6 +384,7 @@ class NotificationDistributorSQLite(NotificationDistributor):
         if base not in (n[0] for n in names):
             raise ValueError('Alias set base is not an alias')
         with self.lock.committing:
+            self.curs.execute('DELETE FROM aliases WHERE base = ?', (base,))
             self.curs.executemany('INSERT OR REPLACE INTO aliases '
                 'VALUES (?, ?, ?)', ((base, n, m) for n, m in names))
 
