@@ -239,7 +239,15 @@ class NotificationDistributorMemory(NotificationDistributor):
 
     def query_seen(self, user):
         with self.lock:
-            return self.seen.get(user)
+            base = self.revaliases.get(user, user)
+            entry, unread = None, 0
+            for k, n in self.aliases.get(base, ((user, None),)):
+                e = self.seen.get(k)
+                if not e: continue
+                if entry is None or e[1] > entry[1]: entry = e
+                unread += e[2]
+            if not entry: return None
+            return (entry[0], entry[1], unread, entry[3])
 
     def update_seen(self, user, name, time, unread, room):
         with self.lock:
@@ -417,8 +425,14 @@ class NotificationDistributorSQLite(NotificationDistributor):
     def query_seen(self, user):
         with self.lock:
             self.curs.execute('SELECT name, timestamp, unread, room '
-                'FROM seen WHERE user = ?', (user,))
-            return self.curs.fetchone()
+                'FROM seen WHERE user IN (SELECT user FROM aliases '
+                                         'WHERE base = ?)', (user,))
+            entry, unread = None, 0
+            for e in self.curs.fetchall():
+                if entry is None or e[1] > entry[1]: entry = e
+                unread += e[2]
+            if not entry: return None
+            return (entry[0], entry[1], unread, entry[3])
 
     def update_seen(self, user, name, timestamp, unread, room):
         with self.lock.committing:
