@@ -159,7 +159,7 @@ class NotificationDistributor:
         raise NotImplementedError
     def query_aliases(self, user):
         raise NotImplementedError
-    def update_aliases(self, base, names):
+    def update_aliases(self, base, names, merge=True):
         raise NotImplementedError
     def query_seen(self, user):
         raise NotImplementedError
@@ -213,15 +213,33 @@ class NotificationDistributorMemory(NotificationDistributor):
         with self.lock:
             return self.aliases.get(base, [])
 
-    def update_aliases(self, base, names):
-        if base not in (n[0] for n in names):
-            raise ValueError('Alias set base is not an alias')
+    def update_aliases(self, base, names, merge=True):
         with self.lock:
-            for el in self.aliases.get(base, ()):
-                self.revaliases.pop(el[0], None)
-            self.aliases[base] = names
-            for el in names:
-                self.revaliases[el[0]] = base
+            # Remove backreferences.
+            for n in self.aliases.pop(base, ()):
+                self.revaliases.pop(n[0], None)
+            # Ensure names is not empty.
+            if not names: return None
+            # Absorb other aliases.
+            nn = OrderedSet.firstel(names)
+            seen = set()
+            for n in [x[0] for x in nn]: # Avoid concurrent modification.
+                k = self.revaliases.get(n, n)
+                if k in seen: continue
+                seen.add(k)
+                if merge:
+                    nn.extend(self.aliases.pop(k, ()))
+                else:
+                    self.aliases[k] = [x for x in self.aliases.get(k, ())
+                                       if x not in nn]
+            # Choose new base if necessary.
+            if (base, None) not in nn: base = names[0][0]
+            # Install alias table.
+            self.aliases[base] = list(nn)
+            # Install backreferences.
+            for n, r in nn: self.revaliases[n] = base
+            # Return new base.
+            return base
 
     def query_seen(self, user):
         with self.lock:
@@ -380,13 +398,26 @@ class NotificationDistributorSQLite(NotificationDistributor):
                               (base,))
             return self.curs.fetchall()
 
-    def update_aliases(self, base, names):
-        if base not in (n[0] for n in names):
-            raise ValueError('Alias set base is not an alias')
+    def update_aliases(self, base, names, merge=True):
         with self.lock.committing:
+            # Discard old aliases.
             self.curs.execute('DELETE FROM aliases WHERE base = ?', (base,))
+            # Shortcut if there are no aliases to be added.
+            if not names: return None
+            # Merge in other aliases if desired.
+            nn = OrderedSet.firstel(names)
+            if merge:
+                for n in [x[0] for x in nn]: # Concurrent modification.
+                    self.curs.execute('SELECT user, name FROM aliases '
+                        'WHERE base = (SELECT base FROM aliases '
+                                      'WHERE user = ?) '
+                        'ORDER BY _rowid_', (n,))
+                    nn.extend(self.curs.fetchall())
+            # Poke all that back into the DB.
             self.curs.executemany('INSERT OR REPLACE INTO aliases '
-                'VALUES (?, ?, ?)', ((base, n, m) for n, m in names))
+                'VALUES (?, ?, ?)', ((base, n, m) for n, m in nn))
+            # Return new base.
+            return base
 
     def query_seen(self, user):
         with self.lock:
