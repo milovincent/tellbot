@@ -159,7 +159,7 @@ class NotificationDistributor:
         raise NotImplementedError
     def query_aliases(self, user):
         raise NotImplementedError
-    def update_aliases(self, base, names, merge=True):
+    def update_aliases(self, base, names):
         raise NotImplementedError
     def query_seen(self, user):
         raise NotImplementedError
@@ -213,7 +213,7 @@ class NotificationDistributorMemory(NotificationDistributor):
         with self.lock:
             return self.aliases.get(base, [])
 
-    def update_aliases(self, base, names, merge=True):
+    def update_aliases(self, base, names):
         with self.lock:
             # Remove backreferences.
             for n in self.aliases.pop(base, ()):
@@ -227,11 +227,7 @@ class NotificationDistributorMemory(NotificationDistributor):
                 k = self.revaliases.get(n, n)
                 if k in seen: continue
                 seen.add(k)
-                if merge:
-                    nn.extend(self.aliases.pop(k, ()))
-                else:
-                    self.aliases[k] = [x for x in self.aliases.get(k, ())
-                                       if x not in nn]
+                nn.extend(self.aliases.pop(k, ()))
             # Choose new base if necessary.
             if (base, None) not in nn: base = names[0][0]
             # Install alias table.
@@ -398,7 +394,7 @@ class NotificationDistributorSQLite(NotificationDistributor):
                               (base,))
             return self.curs.fetchall()
 
-    def update_aliases(self, base, names, merge=True):
+    def update_aliases(self, base, names):
         with self.lock.committing:
             # Discard old aliases.
             self.curs.execute('DELETE FROM aliases WHERE base = ?', (base,))
@@ -406,13 +402,12 @@ class NotificationDistributorSQLite(NotificationDistributor):
             if not names: return None
             # Merge in other aliases if desired.
             nn = OrderedSet.firstel(names)
-            if merge:
-                for n in [x[0] for x in nn]: # Concurrent modification.
-                    self.curs.execute('SELECT user, name FROM aliases '
-                        'WHERE base = (SELECT base FROM aliases '
-                                      'WHERE user = ?) '
-                        'ORDER BY _rowid_', (n,))
-                    nn.extend(self.curs.fetchall())
+            for n in [x[0] for x in nn]: # Concurrent modification.
+                self.curs.execute('SELECT user, name FROM aliases '
+                    'WHERE base = (SELECT base FROM aliases '
+                                  'WHERE user = ?) '
+                    'ORDER BY _rowid_', (n,))
+                nn.extend(self.curs.fetchall())
             # Poke all that back into the DB.
             self.curs.executemany('INSERT OR REPLACE INTO aliases '
                 'VALUES (?, ?, ?)', ((base, n, m) for n, m in nn))
