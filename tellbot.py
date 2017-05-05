@@ -243,7 +243,8 @@ class NotificationDistributorMemory(NotificationDistributor):
             for k, n in self.aliases.get(base, ((user, None),)):
                 e = self.seen.get(k)
                 if not e: continue
-                if entry is None or e[1] > entry[1]: entry = e
+                if entry is None or e[1] is not None and e[1] > entry[1]:
+                    entry = e
                 unread += e[2]
             if not entry: return None
             return (entry[0], entry[1], unread, entry[3])
@@ -411,10 +412,11 @@ class NotificationDistributorSQLite(NotificationDistributor):
             nn = OrderedSet.firstel(names)
             for n in [x[0] for x in nn]: # Concurrent modification.
                 self.curs.execute('SELECT user, name FROM aliases '
-                    'WHERE base = (SELECT base FROM aliases '
-                                  'WHERE user = ?) '
+                    'WHERE base = (SELECT base FROM aliases WHERE user = ?) '
                     'ORDER BY _rowid_', (n,))
                 nn.extend(self.curs.fetchall())
+            # Check if we need a new base.
+            if (base, None) not in nn: base = names[0][0]
             # Poke all that back into the DB.
             self.curs.executemany('INSERT OR REPLACE INTO aliases '
                 'VALUES (?, ?, ?)', ((base, n, m) for n, m in nn))
@@ -425,10 +427,12 @@ class NotificationDistributorSQLite(NotificationDistributor):
         with self.lock:
             self.curs.execute('SELECT name, timestamp, unread, room '
                 'FROM seen WHERE user IN (SELECT user FROM aliases '
-                                         'WHERE base = ?)', (user,))
+                    'WHERE base = (SELECT base FROM aliases WHERE user = ?) '
+                'UNION SELECT ?)', (user, user))
             entry, unread = None, 0
             for e in self.curs.fetchall():
-                if entry is None or e[1] > entry[1]: entry = e
+                if entry is None or e[1] is not None and e[1] > entry[1]:
+                    entry = e
                 unread += e[2]
             if not entry: return None
             return (entry[0], entry[1], unread, entry[3])
@@ -472,28 +476,28 @@ class NotificationDistributorSQLite(NotificationDistributor):
             self.curs.execute('SELECT COUNT(*), MIN(timestamp), '
                 'MAX(timestamp) FROM messages '
                 'WHERE recipient IN (SELECT user FROM aliases '
-                    'WHERE base = (SELECT base FROM aliases WHERE user = ?)'
-                ') AND delivered IS NULL', (user,))
+                    'WHERE base = (SELECT base FROM aliases WHERE user = ?) '
+                'UNION SELECT ?) AND delivered IS NULL', (user, user))
             return self.curs.fetchone()
 
     def query_messages(self, user, stale=False):
         with self.lock:
             query = ('SELECT _rowid_, * FROM messages '
                 'WHERE recipient IN (SELECT user FROM aliases '
-                    'WHERE base = (SELECT base FROM aliases WHERE user = ?)'
-                ') %s ORDER BY timestamp') % (
+                    'WHERE base = (SELECT base FROM aliases WHERE user = ?) '
+                'UNION SELECT ?) %s ORDER BY timestamp') % (
                 '' if stale else 'AND delivered IS NULL')
-            self.curs.execute(query, (user,))
+            self.curs.execute(query, (user, user))
             return self._unwrap_messages(self.curs.fetchall())
 
     def pop_messages(self, user, stale=False):
         with self.lock.committing:
             query = ('SELECT _rowid_, sender, reason, text, timestamp '
                 'FROM messages WHERE recipient IN (SELECT user FROM aliases '
-                    'WHERE base = (SELECT base FROM aliases WHERE user = ?)'
-                ') %s ORDER BY timestamp') % (
+                    'WHERE base = (SELECT base FROM aliases WHERE user = ?) '
+                'UNION SELECT ?) %s ORDER BY timestamp') % (
                 '' if stale else 'AND delivered IS NULL')
-            self.curs.execute(query, (user,))
+            self.curs.execute(query, (user, user))
             msgs = self.curs.fetchall()
             now = time.time()
             self.curs.executemany('UPDATE messages SET delivered = ? '
