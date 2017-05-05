@@ -157,7 +157,7 @@ class NotificationDistributor:
         return (basebot.normalize_nick(name), seminormalize_nick(name))
     def query_user(self, name):
         raise NotImplementedError
-    def query_aliases(self, user):
+    def query_aliases(self, base):
         raise NotImplementedError
     def update_aliases(self, base, names):
         raise NotImplementedError
@@ -271,18 +271,28 @@ class NotificationDistributorMemory(NotificationDistributor):
 
     def message_bounds(self, user):
         with self.lock:
-            msgs = self.messages.get(user, ())
+            msgs = self.query_messages(user)
             if not msgs: return (0, None, None)
             return (len(msgs), min(m['timestamp'] for m in msgs),
                     max(m['timestamp'] for m in msgs))
 
     def query_messages(self, user, stale=False):
         with self.lock:
-            return self.messages.get(user, [])
+            base = self.revaliases.get(user, user)
+            names = self.aliases.get(base, ((user, None),))
+            msgs = []
+            for n in names: msgs.extend(self.messages.get(n[0], ()))
+            msgs.sort(key=operator.itemgetter('timestamp'))
+            return msgs
 
     def pop_messages(self, user, stale=False):
         with self.lock:
-            return self.messages.pop(user, [])
+            base = self.revaliases.get(user, user)
+            names = self.aliases.get(base, ((user, None),))
+            msgs = []
+            for n in names: msgs.extend(self.messages.get(n[0], ()))
+            msgs.sort(key=operator.itemgetter('timestamp'))
+            return list(msgs)
 
     def add_message(self, user, message):
         message['id'] = id(message)
@@ -460,26 +470,35 @@ class NotificationDistributorSQLite(NotificationDistributor):
     def message_bounds(self, user):
         with self.lock:
             self.curs.execute('SELECT COUNT(*), MIN(timestamp), '
-                'MAX(timestamp) FROM messages WHERE recipient = ? '
-                'AND delivered IS NULL', (user,))
+                'MAX(timestamp) FROM messages '
+                'WHERE recipient IN (SELECT user FROM aliases '
+                    'WHERE base = (SELECT base FROM aliases WHERE user = ?)'
+                ') AND delivered IS NULL', (user,))
             return self.curs.fetchone()
 
     def query_messages(self, user, stale=False):
         with self.lock:
             query = ('SELECT _rowid_, * FROM messages '
-                'WHERE recipient = ? %s ORDER BY timestamp') % (
+                'WHERE recipient IN (SELECT user FROM aliases '
+                    'WHERE base = (SELECT base FROM aliases WHERE user = ?)'
+                ') %s ORDER BY timestamp') % (
                 '' if stale else 'AND delivered IS NULL')
             self.curs.execute(query, (user,))
             return self._unwrap_messages(self.curs.fetchall())
 
     def pop_messages(self, user, stale=False):
         with self.lock.committing:
-            query = ('SELECT _rowid_, sender, reason, text, '
-                'timestamp FROM messages WHERE recipient = ? '
-                '%s ORDER BY timestamp') % (
+            query = ('SELECT _rowid_, sender, reason, text, timestamp '
+                'FROM messages WHERE recipient IN (SELECT user FROM aliases '
+                    'WHERE base = (SELECT base FROM aliases WHERE user = ?)'
+                ') %s ORDER BY timestamp') % (
                 '' if stale else 'AND delivered IS NULL')
             self.curs.execute(query, (user,))
-            msgs = tuple(self.curs.fetchall())
+            msgs = self.curs.fetchall()
+            now = time.time()
+            self.curs.executemany('UPDATE messages SET delivered = ? '
+                'WHERE _rowid_ = ? AND delivered IS NULL',
+                ((now, i[0]) for i in msgs))
             return self._unwrap_messages((i, s, user, w, c, t, None, None)
                                          for i, s, w, c, t in msgs)
 
@@ -564,7 +583,7 @@ class TellBot(basebot.Bot):
     def handle_chat_ex(self, msg, meta):
         basebot.Bot.handle_chat_ex(self, msg, meta)
         distr, reply = self.manager.distributor, meta['reply']
-        user, now = distr.query_user(msg['sender']['name']), time.time()
+        user, now = distr.normalize_user(msg['sender']['name']), time.time()
 
         # Update online time database.
         if meta['edit'] or meta['long']: return
@@ -575,9 +594,6 @@ class TellBot(basebot.Bot):
         # Deliver messages to myself.
         if msg['sender']['session_id'] == self.session_id:
             messages = distr.pop_messages(user[0])
-            for m in messages:
-                distr.add_delivery(m, None, now)
-                # ... reading ...
             if len(messages) == 1:
                 reply('/me read 1 message.')
             elif messages:
@@ -662,7 +678,7 @@ class TellBot(basebot.Bot):
     def handle_command(self, cmdline, meta):
         # Common part of the argument parsers.
         def parse_userlist(base, groups, it, userpol='normal',
-                           grouppol='normal', query=True):
+                           grouppol='normal'):
             def check_policy(t, x):
                 if t == 'user':
                     policy, othpolicy, ot = userpol, grouppol, 'group'
@@ -679,13 +695,12 @@ class TellBot(basebot.Bot):
                 elif othpolicy == 'get':
                     reply('Please specify a ' + ot + ' first.')
                     return Ellipsis, count
-            q = distr.query_user if query else distr.normalize_user
             count = 0
             for arg in it:
                 if arg.startswith('@'): # Add user.
                     r = check_policy('user', False)
                     if r: return r
-                    u = q(arg[1:])
+                    u = distr.normalize_user(arg[1:])
                     base.append(u)
                     groups[arg] = [u]
                     count += 1
@@ -699,7 +714,7 @@ class TellBot(basebot.Bot):
                 elif arg.startswith('+@'): # Add user (long form).
                     r = check_policy('user', True)
                     if r: return r
-                    u = q(arg[2:])
+                    u = distr.normalize_user(arg[2:])
                     base.append(u)
                     groups[arg[1:]] = [u]
                     count += 1
@@ -713,7 +728,7 @@ class TellBot(basebot.Bot):
                 elif arg.startswith('-@'): # Discard user.
                     r = check_policy('user', True)
                     if r: return r
-                    base.discard(q(arg[2:]))
+                    base.discard(distr.normalize_user(arg[2:]))
                     count += 1
                 elif arg.startswith('-*'): # Discard group.
                     r = check_policy('group', True)
@@ -755,7 +770,7 @@ class TellBot(basebot.Bot):
 
         basebot.Bot.handle_command(self, cmdline, meta)
         distr = self.manager.distributor
-        sender = distr.query_user(meta['sender'])
+        sender = distr.normalize_user(meta['sender'])
         replybuf = []
 
         # Ensure replies are delivered.
@@ -805,7 +820,7 @@ class TellBot(basebot.Bot):
                 if cause is None:
                     reply('Message not recognized.')
                     return
-                recipient = distr.query_user(cause['from'])
+                recipient = distr.normalize_user(cause['from'])
 
                 # Send message.
                 self.send_notify(
@@ -833,7 +848,7 @@ class TellBot(basebot.Bot):
 
                 # Determine group members.
                 if reason.startswith('@'):
-                    groups = {reason: [distr.query_user(reason[1:])]}
+                    groups = {reason: [distr.normalize_user(reason[1:])]}
                 else:
                     groups = {reason: distr.query_group(reason[1:])}
                 recipients = OrderedSet.firstel(groups[reason])
