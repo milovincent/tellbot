@@ -398,8 +398,8 @@ class NotificationDistributorSQLite(NotificationDistributor):
 
     def query_aliases(self, base):
         with self.lock:
-            self.curs.execute('SELECT user, name FROM aliases WHERE base = ?',
-                              (base,))
+            self.curs.execute('SELECT user, name FROM aliases '
+                'WHERE base = ? ORDER BY _rowid_', (base,))
             return self.curs.fetchall()
 
     def update_aliases(self, base, names):
@@ -449,10 +449,11 @@ class NotificationDistributorSQLite(NotificationDistributor):
     def list_groups(self):
         with self.lock:
             self.curs.execute('SELECT DISTINCT groupname FROM groups')
-            return list(i[0] for i in self.curs.fetchall())
+            return [i[0] for i in self.curs.fetchall()]
 
     def query_group(self, name, raw=False):
         with self.lock:
+            # base is redacted out by the following code
             self.curs.execute('SELECT base, member, groups.name FROM groups '
                 'LEFT JOIN aliases ON member = user WHERE groupname = ? '
                 'ORDER BY groups._rowid_', (name,))
