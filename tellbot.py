@@ -194,7 +194,6 @@ class NotificationDistributorMemory(NotificationDistributor):
         self.messages = {}
         self.deliveries = {}
         self.groups = {}
-        self.revgroups = {}
         self.lock = threading.RLock()
 
     def __enter__(self):
@@ -268,17 +267,7 @@ class NotificationDistributorMemory(NotificationDistributor):
 
     def update_group(self, name, members):
         with self.lock:
-            for e in self.groups.get(name, ()):
-                g = self.revgroups[e[0]]
-                g.discard(name)
             self.groups[name] = members
-            for e in members:
-                try:
-                    g = self.revgroups[e[0]]
-                except KeyError:
-                    g = set()
-                    self.revgroups[e[0]] = g
-                g.add(name)
 
     def message_bounds(self, user):
         with self.lock:
