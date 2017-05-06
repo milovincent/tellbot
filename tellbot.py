@@ -233,8 +233,8 @@ class NotificationDistributorMemory(NotificationDistributor):
             self.aliases[base] = list(nn)
             # Install backreferences.
             for n, r in nn: self.revaliases[n] = base
-            # Return new base.
-            return base
+            # Return new values.
+            return (base, self.aliases[base])
 
     def query_seen(self, user):
         with self.lock:
@@ -420,8 +420,8 @@ class NotificationDistributorSQLite(NotificationDistributor):
             # Poke all that back into the DB.
             self.curs.executemany('INSERT OR REPLACE INTO aliases '
                 'VALUES (?, ?, ?)', ((base, n, m) for n, m in nn))
-            # Return new base.
-            return base
+            # Return new values.
+            return (base, list(nn))
 
     def query_seen(self, user):
         with self.lock:
@@ -762,9 +762,16 @@ class TellBot(basebot.Bot):
             reply(head + lst)
 
         # Reply with the users from a given list.
-        def display_aliases(names, ping, comment):
-            head = 'Aliases%s%s%s: ' % ((' ' if comment else ''), comment,
-                (' (%s)' % len(names) if names else ''))
+        def display_aliases(base, names, ping, comment):
+            altbases = [x for x in names if x[0] == base[0]]
+            if altbases:
+                bname = ' of @' + altbases[0][1]
+            elif base[1]:
+                bname = ' of @' + base[1]
+            else:
+                bname = ''
+            head = 'Aliases%s%s%s%s: ' % (bname, (' ' if comment else ''),
+                comment, (' (%s)' % len(names) if names else ''))
             tr = lambda x: format_nick(x, ping)
             lst = format_list(map(tr, names), '-none-')
             reply(head + lst)
@@ -976,7 +983,11 @@ class TellBot(basebot.Bot):
                         return
                     elif arg.startswith('@'):
                         base = distr.query_user(arg[1:])
-                        old_names = distr.query_aliases(base[0])
+                        base_names = distr.query_aliases(base[0])
+                        if base_names:
+                            old_names = base_names
+                        else:
+                            old_names = [distr.normalize_user(arg[1:])]
                         if cmdline[0] == '!alias':
                             names = OrderedSet.firstel(old_names)
                         else:
@@ -997,7 +1008,7 @@ class TellBot(basebot.Bot):
                     return
 
                 # Display old membership.
-                display_aliases(old_names, ping,
+                display_aliases(base, base_names, ping,
                                 ('now' if count == 0 else 'before'))
                 if count == 0: return
 
@@ -1006,10 +1017,10 @@ class TellBot(basebot.Bot):
                     removes = names
                     names = OrderedSet.firstel(old_names)
                     names.discard_all(removes)
-                distr.update_aliases(base[0], list(names))
+                nbase, nnames = distr.update_aliases(base[0], list(names))
 
                 # Display new membership.
-                display_aliases(names, ping, 'after')
+                display_aliases((nbase, None), nnames, ping, 'after')
 
             # When was a user last active?
             elif cmdline[0] == '!seen':
