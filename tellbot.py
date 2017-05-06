@@ -755,10 +755,18 @@ class TellBot(basebot.Bot):
         # Reply with the users from a given list.
         def display_group(groupname, members, ping, comment):
             head = 'Members of *%s%s%s%s: ' % (groupname,
-                ' ' if comment else '', comment,
-                ' (%s)' % len(members) if members else '')
+                (' ' if comment else ''), comment,
+                (' (%s)' % len(members) if members else ''))
             tr = lambda x: format_nick(x, ping)
             lst = format_list(map(tr, members), '-none-')
+            reply(head + lst)
+
+        # Reply with the users from a given list.
+        def display_aliases(names, ping, comment):
+            head = 'Aliases%s%s%s: ' % ((' ' if comment else ''), comment,
+                (' (%s)' % len(names) if names else ''))
+            tr = lambda x: format_nick(x, ping)
+            lst = format_list(map(tr, names), '-none-')
             reply(head + lst)
 
         # Accumulate a reply.
@@ -938,7 +946,7 @@ class TellBot(basebot.Bot):
 
                 # Display old membership.
                 display_group(groupname, old_members, ping,
-                              '' if count == 0 else 'before')
+                              ('' if count == 0 else 'before'))
                 if count == 0: return
 
                 # Apply changes.
@@ -946,10 +954,62 @@ class TellBot(basebot.Bot):
                     removes = members
                     members = OrderedSet.firstel(old_members)
                     members.discard_all(removes)
-                distr.update_group(groupname, tuple(members))
+                distr.update_group(groupname, list(members))
 
                 # Display new membership.
                 display_group(groupname, members, ping, 'after')
+
+            # Update a user's aliases.
+            elif cmdline[0] in ('!alias', '!unalias'):
+                self._log_command(cmdline)
+                # Parse arguments.
+                base, names, ping = None, None, False
+                it, count = iter(cmdline[1:]), 0
+                while 1:
+                    arg, cnt = parse_userlist(names, {}, it,
+                        userpol=('get' if base is None else 'normal'),
+                        grouppol='none')
+                    count += cnt
+                    if arg is None:
+                        break
+                    elif arg is Ellipsis:
+                        return
+                    elif arg.startswith('@'):
+                        base = distr.query_user(arg[1:])
+                        old_names = distr.query_aliases(base[0])
+                        if cmdline[0] == '!alias':
+                            names = OrderedSet.firstel(old_names)
+                        else:
+                            names = OrderedSet.firstel()
+                    elif arg == '--ping':
+                        ping = True
+                    elif arg.startswith('--') and arg != '--':
+                        reply('Unknown option %s.' % arg)
+                        return
+                    else:
+                        reply('Please specify group changes only.')
+                        return
+                if base is None:
+                    reply('Please specify a group to show or change.')
+                    return
+                elif cmdline[0] == '!unalias' and count == 0:
+                    reply('Nothing to be done.')
+                    return
+
+                # Display old membership.
+                display_aliases(old_names, ping,
+                                ('now' if count == 0 else 'before'))
+                if count == 0: return
+
+                # Apply changes.
+                if cmdline[0] == '!unalias':
+                    removes = names
+                    names = OrderedSet.firstel(old_names)
+                    names.discard_all(removes)
+                distr.update_aliases(base[0], list(names))
+
+                # Display new membership.
+                display_aliases(names, ping, 'after')
 
             # When was a user last active?
             elif cmdline[0] == '!seen':
