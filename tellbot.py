@@ -218,7 +218,7 @@ class NotificationDistributorMemory(NotificationDistributor):
             for n in self.aliases.pop(base, ()):
                 self.revaliases.pop(n[0], None)
             # Ensure names is not empty.
-            if not names: return None
+            if not names: return (None, names)
             # Absorb other aliases.
             nn = OrderedSet.firstel(names)
             seen = set()
@@ -407,7 +407,7 @@ class NotificationDistributorSQLite(NotificationDistributor):
             # Discard old aliases.
             self.curs.execute('DELETE FROM aliases WHERE base = ?', (base,))
             # Shortcut if there are no aliases to be added.
-            if not names: return None
+            if not names: return (None, names)
             # Merge in other aliases if desired.
             nn = OrderedSet.firstel(names)
             for n in [x[0] for x in nn]: # Concurrent modification.
@@ -768,6 +768,7 @@ class TellBot(basebot.Bot):
                 bname = ' of @' + altbases[0][1]
             elif base[1]:
                 bname = ' of @' + base[1]
+                if not names: names = [base]
             else:
                 bname = ''
             head = 'Aliases%s%s%s%s: ' % (bname, (' ' if comment else ''),
@@ -983,10 +984,8 @@ class TellBot(basebot.Bot):
                         return
                     elif arg.startswith('@'):
                         base = distr.query_user(arg[1:])
-                        base_names = distr.query_aliases(base[0])
-                        if base_names:
-                            old_names = base_names
-                        else:
+                        old_names = distr.query_aliases(base[0])
+                        if not old_names:
                             old_names = [distr.normalize_user(arg[1:])]
                         if cmdline[0] == '!alias':
                             names = OrderedSet.firstel(old_names)
@@ -1008,7 +1007,7 @@ class TellBot(basebot.Bot):
                     return
 
                 # Display old membership.
-                display_aliases(base, base_names, ping,
+                display_aliases(base, old_names, ping,
                                 ('now' if count == 0 else 'before'))
                 if count == 0: return
 
@@ -1020,7 +1019,10 @@ class TellBot(basebot.Bot):
                 nbase, nnames = distr.update_aliases(base[0], list(names))
 
                 # Display new membership.
-                display_aliases((nbase, None), nnames, ping, 'after')
+                if nnames:
+                    display_aliases((nbase, None), nnames, ping, 'after')
+                else:
+                    display_aliases(base, (), ping, 'after')
 
             # When was a user last active?
             elif cmdline[0] == '!seen':
