@@ -269,6 +269,7 @@ class NotificationDistributorMemory(NotificationDistributor):
     def update_group(self, name, members):
         with self.lock:
             self.groups[name] = members
+            return self.query_group(name)
 
     def message_bounds(self, user):
         with self.lock:
@@ -470,6 +471,7 @@ class NotificationDistributorSQLite(NotificationDistributor):
                               (name,))
             self.curs.executemany('INSERT INTO groups VALUES (?, ?, ?)',
                                   ((name, m, n) for m, n in members))
+            return self.query_group(name)
 
     def message_bounds(self, user):
         with self.lock:
@@ -962,10 +964,10 @@ class TellBot(basebot.Bot):
                     removes = members
                     members = OrderedSet.firstel(old_members)
                     members.discard_all(removes)
-                distr.update_group(groupname, list(members))
+                nmembers = distr.update_group(groupname, list(members))
 
                 # Display new membership.
-                display_group(groupname, members, ping, 'after')
+                display_group(groupname, nmembers, ping, 'after')
 
             # Update a user's aliases.
             elif cmdline[0] in ('!alias', '!unalias'):
