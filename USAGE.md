@@ -103,11 +103,11 @@ with any character). Implicit self exclusion happens in the case of
     !tgroup [--ping] *<group> [<user-list>]
     !tungroup [--ping] *<group> <user-list>
 
-`!tgroup`: Update the given `group` with the result of building
+`!tgroup` updates the given `group` with the result of building
 [`user-list`](#user-lists) basing upon it. If `user-list` is empty, the
 members of the group are displayed without mutating it.
 
-`!tungroup`: Remove all members of `user-list` (starting with an empty
+`!tungroup` removes all members of `user-list` (starting with an empty
 set) from the group. Note that the `user-list` must be nonempty; otherwise,
 the command has no effect.
 
@@ -191,6 +191,65 @@ it from an end, use leading or trailing asterisks `*`.
 
     !tgrouplist *[?]
       *anyquestions?
+
+### !alias and !unalias
+
+    !alias [--ping] @<user> [<user-list>]
+    !unalias [--ping] @<user> <user-list>
+
+Alias together multiple users (along with all their former aliases) and/or
+remove some aliases of a user.
+
+`!alias` builds the given [`user-list`](#user-lists) — which may not contain
+groups — starting from the current set of aliases of `user`, extends the list
+by all other aliases of users contained in the list (*except* `user`), and
+installs the result as a new alias list instead of the former one of `user`
+(and any added members).
+
+`!unalias` builds the `user-list` — which again may contain no groups — and
+removes the entries of `user-list` from the alias list of `user`; it cannot
+add new aliases.
+
+Unless `--ping` is passed, user names are not @-mentioned to avoid
+unnecessary alerting.
+
+For consistency's sake, a user is always considered to have a one-entry alias
+set if no other aliases are present (or the observable behavior should be
+equivalent to that).
+
+Aliases interact with the other features of `@TellBot` primarily at the time
+of retrieval. A group some members whereof have been aliased together retains
+all members _per se_ (although only one is displayed); when it is modified,
+however, only one of the aliases is written back. Messages are stored with
+the recipient originally indicated, and are delivered to which alias ever of
+that user appears first. Information about when a user has been seen is
+stored per original name, and the results for all aliases of a user are
+aggregated when the information is actually requested.
+
+Hence, creating and removing an alias again would not have too many grave
+consequences if other information concerning that user is not accessed in the
+meantime.
+
+**Examples**
+
+    !alias @user1 @user2 @user3
+      Aliases of @user1 before: user1
+      Aliases of @user1 after: user1, user2, and user3
+
+    !alias --ping @userA @userB @userX
+      Aliases of @userA before: @userA
+      Aliases of @userA after: @userA, @userB, and @userX
+
+    !unalias @userX @userX
+      Aliases of @userX before: userA, userB, and userX
+      Aliases of @userA after: userA and userB
+
+    !alias @user1 @userA
+      Aliases of @user1 before: user1, user2, and user3
+      Aliases of @user1 after: user1, user2, user3, userA, and userB
+
+    !alias --ping @test
+      Aliases of @test: @test
 
 ### !seen
 

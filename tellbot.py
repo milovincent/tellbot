@@ -1008,7 +1008,7 @@ class TellBot(basebot.Bot):
 
                 # Display old membership.
                 display_aliases(base, old_names, ping,
-                                ('now' if count == 0 else 'before'))
+                                ('' if count == 0 else 'before'))
                 if count == 0: return
 
                 # Apply changes.
