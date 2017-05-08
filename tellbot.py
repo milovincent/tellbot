@@ -950,7 +950,7 @@ class TellBot(basebot.Bot):
             elif cmdline[0] == '!tgroupsof':
                 self._log_command(cmdline)
                 # Parse arguments.
-                users = OrderedSet.firstel()
+                users, ping = OrderedSet.firstel(), False
                 it = iter(cmdline[1:])
                 while 1:
                     arg, cnt = parse_userlist(users, {}, it)
@@ -958,20 +958,23 @@ class TellBot(basebot.Bot):
                         break
                     elif arg is Ellipsis:
                         return
+                    elif arg == '--ping':
+                        ping = True
                     elif arg.startswith('--'):
-                        reply('Please specify users or groups only.')
+                        reply('Unknown option %s.' % arg)
                         return
 
                 # Handle empty list.
                 if not users:
-                    reply('No-one to check for.')
+                    reply('No-one to look for.')
                     return
 
                 # Actually output into.
                 for user, nick in users:
                     groups = sorted(distr.query_groups_of(user))
-                    reply('Groups of @%s: %s' % (nick, format_list(groups,
-                                                                   '-none-')))
+                    count = ' (%s)' % len(groups) if groups else ''
+                    reply('Groups of %s%s: %s' % (format_nick((user, nick),
+                        ping), count, format_list(groups, '-none-')))
 
             # Update a group.
             elif cmdline[0] in ('!tgroup', '!tungroup'):
