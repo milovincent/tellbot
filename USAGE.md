@@ -192,6 +192,26 @@ it from an end, use leading or trailing asterisks `*`.
     !tgrouplist *[?]
       *anyquestions?
 
+### !tgroupsof
+
+    !tgroupsof [--ping] <user-list>
+
+Reply with the groups the users in [`user-list`](#user-lists) are members of.
+
+Unless `--ping` is specified, users are not pinged.
+
+**Examples**
+
+    !tgroupsof @user1
+      Groups of @user1: -none-
+
+    !tgroupsof @user2
+      Groups of @user2 (1): *group1
+
+    !tgroupsof *group1
+      Groups of @user2 (1): *group1
+      Groups of @user3 (3): *group1, *group2, and *group3
+
 ### !alias and !unalias
 
     !alias [--ping] @<user> [<user-list>]

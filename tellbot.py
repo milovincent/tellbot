@@ -974,7 +974,8 @@ class TellBot(basebot.Bot):
                     groups = sorted(distr.query_groups_of(user))
                     count = ' (%s)' % len(groups) if groups else ''
                     reply('Groups of %s%s: %s' % (format_nick((user, nick),
-                        ping), count, format_list(groups, '-none-')))
+                        ping), count, format_list(['*' + i for i in groups],
+                        '-none-')))
 
             # Update a group.
             elif cmdline[0] in ('!tgroup', '!tungroup'):
