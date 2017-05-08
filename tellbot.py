@@ -481,8 +481,8 @@ class NotificationDistributorSQLite(NotificationDistributor):
             self.curs.execute('SELECT DISTINCT groupname FROM groups '
                 'WHERE member IN (SELECT user FROM aliases '
                     'WHERE base = (SELECT base FROM aliases WHERE user = ?) '
-                'UNION SELECT ?)', (user,))
-            return sorted(self.curs.fetchall())
+                'UNION SELECT ?)', (user, user))
+            return sorted(x[0] for x in self.curs.fetchall())
 
     def query_group(self, name, raw=False):
         with self.lock:
