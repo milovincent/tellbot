@@ -169,6 +169,10 @@ class NotificationDistributor:
         raise NotImplementedError
     def update_group(self, name, members):
         raise NotImplementedError
+    def query_groupdesc(self, name):
+        raise NotImplementedError
+    def update_groupdesc(self, name, description):
+        raise NotImplementedError
     def message_bounds(self, user):
         raise NotImplementedError
     def query_messages(self, user, stale=False):
@@ -193,6 +197,7 @@ class NotificationDistributorMemory(NotificationDistributor):
         self.deliveries = {}
         self.groups = {}
         self.revgroups = {}
+        self.groupdescs = {}
         self.lock = threading.RLock()
 
     def __enter__(self):
@@ -288,6 +293,14 @@ class NotificationDistributorMemory(NotificationDistributor):
                 g.add(name)
             return self.query_group(name)
 
+    def query_groupdesc(self, name):
+        with self.lock:
+            return self.groupdescs.get(name)
+
+    def update_groupdesc(self, name, description):
+        with self.lock:
+            self.groupdescs[name] = description
+
     def message_bounds(self, user):
         with self.lock:
             msgs = self.query_messages(user)
@@ -371,6 +384,11 @@ class NotificationDistributorSQLite(NotificationDistributor):
                                   'member TEXT,'
                                   'name TEXT,'
                                   'PRIMARY KEY (groupname, member)'
+                              ')')
+            # Group description table.
+            self.curs.execute('CREATE TABLE IF NOT EXISTS groupdescs ('
+                                  'groupname TEXT PRIMARY KEY,'
+                                  'description TEXT'
                               ')')
             # Seen table.
             self.curs.execute('CREATE TABLE IF NOT EXISTS seen ('
@@ -497,6 +515,18 @@ class NotificationDistributorSQLite(NotificationDistributor):
             self.curs.executemany('INSERT INTO groups VALUES (?, ?, ?)',
                                   ((name, m, n) for m, n in members))
             return self.query_group(name)
+
+    def query_groupdesc(self, name):
+        with self.lock:
+            self.curs.execute('SELECT description FROM groupdescs '
+                'WHERE groupname = ?', (name,))
+            res = self.curs.fetchone()
+            return res[0] if res else None
+
+    def update_groupdesc(self, name, description):
+        with self.lock.committing:
+            self.curs.execute('INSERT OR REPLACE INTO groupdescs '
+                'VALUES (?, ?)', (name, description))
 
     def message_bounds(self, user):
         with self.lock:
