@@ -19,10 +19,6 @@ To add a message to other users' mailbox, use
 To create or grow, or shrink a group of users, use
     !tgroup *group @user1 [@user2 ...] [*group1 ...]
     !tgroup *group -@user1 [-@user2 ...] [-*group1 ...]
-To list available groups, use
-    !tgrouplist
-To check when a user was last online, use
-    !seen @user
 For a thorough manual, see https://github.com/CylonicRaider/tellbot.
 '''[1:-1]
 
