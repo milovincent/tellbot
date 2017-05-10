@@ -1052,12 +1052,17 @@ class TellBot(basebot.Bot):
                 # Update description.
                 if newdesc:
                     olddesc = distr.query_groupdesc(groupname)
-                    if olddesc: reply('Old description: ' + olddesc)
+                    if olddesc:
+                        reply('Old description: ' +
+                              olddesc.replace('\n', '\n    '))
                     distr.update_groupdesc(groupname, newdesc)
-                    reply('New description: ' + newdesc)
+                    reply('New description: ' +
+                          newdesc.replace('\n', '\n    '))
                 else:
                     desc = distr.query_groupdesc(groupname)
-                    if desc: reply('Description: ' + desc)
+                    if desc:
+                        reply('Description: ' +
+                              desc.replace('\n', '\n    '))
 
                 # Display old membership.
                 display_group(groupname, old_members, ping,
