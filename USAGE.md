@@ -100,7 +100,7 @@ with any character). Implicit self exclusion happens in the case of
 
 ### !tgroup and !tungroup
 
-    !tgroup [--ping] *<group> [<user-list>]
+    !tgroup [--ping] *<group> [<user-list>] [-- <description>]
     !tungroup [--ping] *<group> <user-list>
 
 `!tgroup` updates the given `group` with the result of building
@@ -114,18 +114,30 @@ the command has no effect.
 Unless `--ping` is passed, user names are not @-mentioned to avoid
 unnecessary alerting.
 
+If `description` is passed, subsequent queries of that group will display
+it until it is replaced.
+
 **Examples**
 
     !tgroup *group @person1 @person2
-      Members of *group before: -none-
-      Members of *group after: person1, person2
+      Group: *group
+      Members before: -none-
+      Members after (2): person1, person2
 
     !tgroup --ping *group
-      Members of *group: @person1, @person2
+      Group: *group
+      Members (2): @person1, @person2
 
-    !tgroup *group -*group
-      Members of *group before: person1, person2
-      Members of *group after: -none-
+    !tgroup *group -*group -- A demonstration group.
+      Group: *group
+      New description: A demonstration group.
+      Members before (2): person1, person2
+      Members after: -none-
+
+    !tgroup *group
+      Group: *group
+      Description: A demonstration group.
+      Members (1): -none-
 
 ### !tgrouplist
 
