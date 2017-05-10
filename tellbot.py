@@ -74,6 +74,10 @@ class OrderedSet:
     def __iter__(self):
         return iter(self.list)
 
+    def __eq__(self, other):
+        if not isinstance(other, OrderedSet): return NotImplemented
+        return self.set == other.set
+
     def copy(self):
         return self.__class__(self, key=self.key)
 
@@ -811,8 +815,7 @@ class TellBot(basebot.Bot):
 
         # Reply with the users from a given list.
         def display_group(groupname, members, ping, comment):
-            head = 'Members of *%s%s%s%s: ' % (groupname,
-                (' ' if comment else ''), comment,
+            head = 'Members%s%s%s: ' % ((' ' if comment else ''), comment,
                 (' (%s)' % len(members) if members else ''))
             tr = lambda x: format_nick(x, ping)
             lst = format_list(map(tr, members), '-none-')
@@ -1008,7 +1011,7 @@ class TellBot(basebot.Bot):
                 self._log_command(cmdline)
                 # Parse arguments.
                 groupname, members, groups, ping = None, None, None, False
-                it, count = iter(cmdline[1:]), 0
+                newdesc, it, count = None, iter(cmdline[1:]), 0
                 while 1:
                     arg, cnt = parse_userlist(members, groups, it,
                         grouppol=('get' if groupname is None else 'normal'))
@@ -1025,9 +1028,15 @@ class TellBot(basebot.Bot):
                         else:
                             members = OrderedSet.firstel()
                         groups = {}
+                    elif arg == '--':
+                        try:
+                            newdesc = meta['line'][next(it).offset:].strip()
+                        except StopIteration:
+                            newdesc = ''
+                        break
                     elif arg == '--ping':
                         ping = True
-                    elif arg.startswith('--') and arg != '--':
+                    elif arg.startswith('--'):
                         reply('Unknown option %s.' % arg)
                         return
                     else:
@@ -1036,24 +1045,32 @@ class TellBot(basebot.Bot):
                 if groupname is None:
                     reply('Please specify a group to show or change.')
                     return
-                elif cmdline[0] == '!tungroup' and count == 0:
-                    reply('Nothing to be done.')
-                    return
+
+                # Reply heading.
+                reply('Group: *%s' % groupname)
+
+                # Update description.
+                if newdesc:
+                    olddesc = distr.query_groupdesc(groupname)
+                    if olddesc: reply('Old description: ' + olddesc)
+                    distr.update_groupdesc(groupname, newdesc)
+                    reply('New description: ' + newdesc)
+                else:
+                    desc = distr.query_groupdesc(groupname)
+                    if desc: reply('Description: ' + desc)
 
                 # Display old membership.
                 display_group(groupname, old_members, ping,
                               ('' if count == 0 else 'before'))
-                if count == 0: return
 
                 # Apply changes.
-                if cmdline[0] == '!tungroup':
-                    removes = members
-                    members = OrderedSet.firstel(old_members)
-                    members.discard_all(removes)
-                nmembers = distr.update_group(groupname, list(members))
-
-                # Display new membership.
-                display_group(groupname, nmembers, ping, 'after')
+                if count != 0:
+                    if cmdline[0] == '!tungroup':
+                        removes = members
+                        members = OrderedSet.firstel(old_members)
+                        members.discard_all(removes)
+                    nmembers = distr.update_group(groupname, list(members))
+                    display_group(groupname, nmembers, ping, 'after')
 
             # Update a user's aliases.
             elif cmdline[0] in ('!alias', '!unalias'):
