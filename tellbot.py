@@ -9,7 +9,7 @@ import sqlite3
 
 import basebot
 
-REPLY_TIMEOUT = 3600
+REPLY_TIMEOUT = 86400
 GC_INTERVAL = 3600
 
 HELP_TEXT = '''
