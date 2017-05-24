@@ -669,10 +669,13 @@ class TellBot(basebot.Bot):
             elif oldest is not None and oldest >= now - 86400: # 1 day
                 self.deliver_notifies(distr, user, reply, False)
             elif unread == 1:
-                reply('You have 1 unread message; use !inbox to read it.')
+                reply('You have 1 unread message; use !inbox to read it and '
+                      'reply to it with !reply-one or !reply-all to reply to '
+                      'it.')
             elif unread > 1:
                 reply('You have %s unread messages; use !inbox to read '
-                      'them.' % unread)
+                      'them and reply to each with !reply-one or !reply-all '
+                      'to reply to them.' % unread)
 
     def send_notify(self, distr, sender, recipients, groups, text, reply,
                     reason=None):
