@@ -9,8 +9,9 @@ import sqlite3
 
 import basebot
 
-REPLY_TIMEOUT = 86400
-GC_INTERVAL = 3600
+INBOX_CUTOFF = 172800 # 2 days
+REPLY_TIMEOUT = 172800 # 2 days
+GC_INTERVAL = 3600 # 1 hour
 
 HELP_TEXT = '''
 To add a message to other users' mailbox, use
@@ -666,7 +667,7 @@ class TellBot(basebot.Bot):
         elif update:
             if re.match(r'!(inbox|boop)\b', msg['content']):
                 pass
-            elif oldest is not None and oldest >= now - 86400: # 1 day
+            elif oldest is not None and oldest >= now - INBOX_CUTOFF:
                 self.deliver_notifies(distr, user, reply, False)
             elif unread == 1:
                 reply('You have 1 unread message; use !inbox to read it and '
