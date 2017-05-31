@@ -190,6 +190,12 @@ class NotificationDistributor:
         raise NotImplementedError
     def add_delivery(self, msg, msgid, timestamp):
         raise NotImplementedError
+    def init_setting(self, key, value):
+        raise NotImplementedError
+    def get_setting(self, key):
+        raise NotImplementedError
+    def set_setting(self, key, value):
+        raise NotImplementedError
     def gc(self):
         raise NotImplementedError
 
@@ -203,6 +209,7 @@ class NotificationDistributorMemory(NotificationDistributor):
         self.groups = {}
         self.revgroups = {}
         self.groupdescs = {}
+        self.settings = {}
         self.lock = threading.RLock()
 
     def __enter__(self):
@@ -347,6 +354,18 @@ class NotificationDistributorMemory(NotificationDistributor):
             msg['delivered'] = timestamp
             self.deliveries[msgid] = msg
 
+    def init_setting(self, key, value):
+        with self.lock:
+            self.settings.setdefault(key, value)
+
+    def get_setting(self, key):
+        with self.lock:
+            return self.settings.get(key)
+
+    def set_setting(self, key, value):
+        with self.lock:
+            self.settings[key] = value
+
     def gc(self):
         deadline = time.time() - REPLY_TIMEOUT
         with self.lock:
@@ -408,6 +427,11 @@ class NotificationDistributorSQLite(NotificationDistributor):
                                   'base TEXT,'
                                   'user TEXT PRIMARY KEY,'
                                   'name TEXT'
+                              ')')
+            # Configuration table.
+            self.curs.execute('CREATE TABLE IF NOT EXISTS settings ('
+                                  'name TEXT PRIMARY KEY,'
+                                  'value TEXT'
                               ')')
             # Schema upgrades.
             self.curs.execute('PRAGMA table_info(seen);')
@@ -588,6 +612,23 @@ class NotificationDistributorSQLite(NotificationDistributor):
             self.curs.execute('UPDATE messages SET delivered_to = ?, '
                 'delivered = ? WHERE _rowid_ = ?', (msgid, timestamp,
                                                     msg['id']))
+
+    def init_setting(self, key, value):
+        with self.lock.committing:
+            self.curs.execute('INSERT OR IGNORE INTO settings VALUES '
+                '(?, ?)', (key, value))
+
+    def get_setting(self, key):
+        with self.lock:
+            self.curs.execute('SELECT value FROM settings WHERE name = ?',
+                              (key,))
+            res = self.curs.fetchone()
+            return None if res is None else res[0]
+
+    def set_setting(self, key, value):
+        with self.lock.committing:
+            self.curs.execute('INSERT OR REPLACE INTO settings VALUES '
+                '(?, ?)', (key, value))
 
     def gc(self):
         deadline = time.time() - REPLY_TIMEOUT
