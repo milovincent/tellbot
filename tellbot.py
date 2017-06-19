@@ -642,6 +642,10 @@ class TellBot(basebot.Bot):
     SHORT_HELP = 'I can schedule messages to be delivered to other users.'
     LONG_HELP = HELP_TEXT
 
+    @classmethod
+    def init_settings(cls, distr):
+        distr.init_setting('nbfallback', 'no')
+
     def _format_nick(self, nick, ping=True, subject=None, title=False):
         nnick = basebot.normalize_nick(nick)
         ttr = (titlefirst if title else lambda x: x)
@@ -1307,6 +1311,7 @@ class TellBotManager(basebot.BotManager):
             self.distributor = NotificationDistributorSQLite(self.db)
         else:
             self.distributor = NotificationDistributorMemory()
+        TellBot.init_settings(self.distributor)
         self.children.append(GCThread(self.distributor))
 
 if __name__ == '__main__': basebot.run_main(TellBot, mgrcls=TellBotManager)
