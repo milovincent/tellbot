@@ -7,6 +7,11 @@ import fnmatch
 import threading
 import sqlite3
 
+try:
+    from queue import Queue
+except ImportError:
+    from Queue import Queue
+
 import basebot
 
 INBOX_CUTOFF = 172800 # 2 days
@@ -643,8 +648,27 @@ class TellBot(basebot.Bot):
     LONG_HELP = HELP_TEXT
 
     @classmethod
+    def delay_runner(cls, queue):
+        while 1:
+            task = queue.get()
+            try:
+                time.sleep(task.time - time.time())
+            except ValueError:
+                pass
+            try:
+                if not task.canceled: task()
+            finally:
+                queue.task_done()
+
+    @classmethod
     def init_settings(cls, distr):
         distr.init_setting('nbfallback', 'no')
+
+    def __init__(self, *args, **kwds):
+        basebot.Bot.__init__(self, *args, **kwds)
+        self._runner = None
+        self._task_queue = None
+        self._pending = {}
 
     def _format_nick(self, nick, ping=True, subject=None, title=False):
         nnick = basebot.normalize_nick(nick)
@@ -690,6 +714,17 @@ class TellBot(basebot.Bot):
                 names.append('...')
             parts.append('%s (%s)' % (n, format_list(names)))
         return (format_list(parts, 'no-one'), reasons)
+
+    def _spawn_task_runner(self):
+        self._task_queue = Queue()
+        self._runner = basebot.spawn_thread(self.delay_runner,
+                                            self._task_queue)
+
+    def _schedule_task(self, delay, func, *args, **kwds):
+        t = lambda: func(*args, **kwds)
+        t.time = time.time() + delay
+        t.canceled = False
+        self._task_queue.append(t)
 
     def handle_chat_ex(self, msg, meta):
         basebot.Bot.handle_chat_ex(self, msg, meta)
@@ -1260,6 +1295,10 @@ class TellBot(basebot.Bot):
         finally:
             distr.__exit__(None, None, None)
             flush()
+
+    def main(self):
+        self._spawn_task_runner()
+        basebot.Bot.main(self)
 
 class GCThread(threading.Thread):
     def __init__(self, distr):
