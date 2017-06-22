@@ -17,6 +17,7 @@ import basebot
 INBOX_CUTOFF = 172800 # 2 days
 REPLY_TIMEOUT = 172800 # 2 days
 GC_INTERVAL = 3600 # 1 hour
+NOTBOT_DELAY = 5 # 5 secs
 
 HELP_TEXT = '''
 To add a message to other users' mailbox, use
@@ -710,12 +711,14 @@ class TellBot(basebot.Bot):
     def _task_runner(self):
         queue = self._task_queue
         while 1:
-            task = self._get_task()
+            task = queue.get()
             try:
                 time.sleep(task.time - time.time())
             except ValueError:
                 pass
             try:
+                with self._tasklock:
+                    self._pending.pop(task.id, None)
                 if not task.canceled: task()
             finally:
                 queue.task_done()
@@ -728,13 +731,7 @@ class TellBot(basebot.Bot):
         t.id = tid
         with self._tasklock:
             if tid: self._pending[tid] = t
-            self._task_queue.append(t)
-
-    def _get_task(self):
-        t = self._task_queue.get()
-        with self._tasklock:
-            self._pending.pop(t.id, None)
-        return t
+            self._task_queue.put(t)
 
     def _cancel_task(self, tid):
         with self._tasklock:
@@ -753,6 +750,10 @@ class TellBot(basebot.Bot):
         unread, oldest, newest = distr.message_bounds(user[0])
         update = distr.update_seen(user[0], user[1], now, unread,
                                    self.roomname)
+
+        # Prevent NotBot fallback from firing.
+        if msg['sender']['session_id'] != self.session_id:
+            self._cancel_task(msg['parent'])
 
         # Deliver messages to myself.
         if msg['sender']['session_id'] == self.session_id:
@@ -842,6 +843,10 @@ class TellBot(basebot.Bot):
             reply('No mail.')
 
     def handle_command(self, cmdline, meta):
+        basebot.Bot.handle_command(self, cmdline, meta)
+        self.process_command(cmdline, meta)
+
+    def process_command(self, cmdline, meta):
         # Common part of the argument parsers.
         def parse_userlist(base, groups, it, userpol='normal',
                            grouppol='normal'):
@@ -949,7 +954,6 @@ class TellBot(basebot.Bot):
                 meta['reply']('\n'.join(replybuf))
                 replybuf[:] = []
 
-        basebot.Bot.handle_command(self, cmdline, meta)
         distr = self.manager.distributor
         sender = distr.normalize_user(meta['sender'])
         replybuf = []
@@ -989,6 +993,16 @@ class TellBot(basebot.Bot):
                 # Actual hauling outlined into own function.
                 self.send_notify(distr, sender, recipients, groups, text,
                                  reply)
+
+            # @NotBot compatibility.
+            elif cmdline[0] == '!notify':
+                # HACK: Monkey-patching shorter command into command line.
+                nbfallback = distr.get_setting('nbfallback')
+                if nbfallback == 'yes':
+                    self.process_command(['!tell'] + cmdline[1:], meta)
+                elif nbfallback == 'wait':
+                    self._schedule_task(NOTBOT_DELAY, self.process_command,
+                        ['!tell'] + cmdline[1:], meta, _id=meta['msgid'])
 
             # Reply to a freshly delivered message.
             elif cmdline[0] == '!reply-one':
