@@ -1363,6 +1363,9 @@ class TellBotManager(basebot.BotManager):
         parser.add_option('--db', dest='db', metavar='<path>',
                           help='SQLite database file for message '
                               'persistence (default in-memory)')
+        parser.add_option('--config', action='append', dest='confopts',
+                          metavar='<key=value>',
+                          help='A setting to apply before starting')
 
     @classmethod
     def interpret_args(cls, options, arguments, config):
@@ -1372,16 +1375,26 @@ class TellBotManager(basebot.BotManager):
             value = getattr(options, name)
             if value is not None:
                 config[name] = value
+        config['confopts'] = []
+        for el in getattr(options, 'confopts') or ():
+            try:
+                n, v = el.split('=', 1)
+            except ValueError:
+                raise SystemExit('Bad configuration value: %r' % el)
+            config['confopts'].append((n, v))
         return (bots, config)
 
     def __init__(self, **config):
         basebot.BotManager.__init__(self, **config)
         self.db = config.get('db', None)
+        self.orig_conf = config.get('confopts', [])
         if self.db:
             self.distributor = NotificationDistributorSQLite(self.db)
         else:
             self.distributor = NotificationDistributorMemory()
         TellBot.init_settings(self.distributor)
+        for n, v in self.orig_conf:
+            self.distributor.set_setting(n, v)
         self.children.append(GCThread(self.distributor))
 
 if __name__ == '__main__': basebot.run_main(TellBot, mgrcls=TellBotManager)
