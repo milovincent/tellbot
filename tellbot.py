@@ -340,7 +340,7 @@ class NotificationDistributorMemory(NotificationDistributor):
             base = self.revaliases.get(user, user)
             names = self.aliases.get(base, ((user, None),))
             msgs = []
-            for n in names: msgs.extend(self.messages.get(n[0], ()))
+            for n in names: msgs.extend(self.messages.pop(n[0], ()))
             msgs.sort(key=operator.itemgetter('timestamp'))
             return list(msgs)
 
