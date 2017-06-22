@@ -17,7 +17,7 @@ import basebot
 INBOX_CUTOFF = 172800 # 2 days
 REPLY_TIMEOUT = 172800 # 2 days
 GC_INTERVAL = 3600 # 1 hour
-NOTBOT_DELAY = 5 # 5 secs
+NOTBOT_DELAY = 10 # 10 secs
 
 HELP_TEXT = '''
 To add a message to other users' mailbox, use
