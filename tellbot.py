@@ -1003,6 +1003,10 @@ class TellBot(basebot.Bot):
                 elif nbfallback == 'wait':
                     self._schedule_task(NOTBOT_DELAY, self.process_command,
                         ['!tell'] + cmdline[1:], meta, _id=meta['msgid'])
+                elif nbfallback.isdigit():
+                    self._schedule_task(int(nbfallback, 10),
+                        self.process_command, ['!tell'] + cmdline[1:], meta,
+                        _id=meta['msgid'])
 
             # Reply to a freshly delivered message.
             elif cmdline[0] == '!reply-one':
