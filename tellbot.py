@@ -651,6 +651,7 @@ class TellBot(basebot.Bot):
     @classmethod
     def init_settings(cls, distr):
         distr.init_setting('nbfallback', 'no')
+        distr.init_setting('mail', 'no')
 
     def __init__(self, *args, **kwds):
         basebot.Bot.__init__(self, *args, **kwds)
