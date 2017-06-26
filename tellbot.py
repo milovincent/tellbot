@@ -196,6 +196,10 @@ class NotificationDistributor:
         raise NotImplementedError
     def add_delivery(self, msg, msgid, timestamp):
         raise NotImplementedError
+    def get_mail_info(self, user):
+        raise NotImplementedError
+    def update_mail_info(self, user, address, throttle):
+        raise NotImplementedError
     def init_setting(self, key, value):
         raise NotImplementedError
     def get_setting(self, key):
@@ -215,6 +219,7 @@ class NotificationDistributorMemory(NotificationDistributor):
         self.groups = {}
         self.revgroups = {}
         self.groupdescs = {}
+        self.mailinfo = {}
         self.settings = {}
         self.lock = threading.RLock()
 
@@ -360,6 +365,14 @@ class NotificationDistributorMemory(NotificationDistributor):
             msg['delivered'] = timestamp
             self.deliveries[msgid] = msg
 
+    def get_mail_info(self, user):
+        with self.lock:
+            return self.mailinfo.get(user)
+
+    def update_mail_info(self, user, address, throttle):
+        with self.lock:
+            self.mailinfo[user] = [address, throttle]
+
     def init_setting(self, key, value):
         with self.lock:
             self.settings.setdefault(key, value)
@@ -433,6 +446,12 @@ class NotificationDistributorSQLite(NotificationDistributor):
                                   'base TEXT,'
                                   'user TEXT PRIMARY KEY,'
                                   'name TEXT'
+                              ')')
+            # Mail table.
+            self.curs.execute('CREATE TABLE IF NOT EXISTS mailinfo ('
+                                  'user TEXT PRIMARY KEY,'
+                                  'address TEXT,'
+                                  'throttle REAL'
                               ')')
             # Configuration table.
             self.curs.execute('CREATE TABLE IF NOT EXISTS settings ('
@@ -618,6 +637,17 @@ class NotificationDistributorSQLite(NotificationDistributor):
             self.curs.execute('UPDATE messages SET delivered_to = ?, '
                 'delivered = ? WHERE _rowid_ = ?', (msgid, timestamp,
                                                     msg['id']))
+
+    def get_mail_info(self, user):
+        with self.lock:
+            self.curs.execute('SELECT address, throttle FROM mailinfo '
+                'WHERE user = ?', (user,))
+            return self.curs.fetchone()
+
+    def update_mail_info(self, user, address, throttle):
+        with self.lock:
+            self.curs.execute('INSERT OR REPLACE INTO mailinfo '
+                'VALUES (?, ?, ?)', (user, address, throttle))
 
     def init_setting(self, key, value):
         with self.lock.committing:
