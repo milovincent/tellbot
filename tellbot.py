@@ -680,8 +680,19 @@ class TellBot(basebot.Bot):
 
     @classmethod
     def init_settings(cls, distr):
+        # NotBot fallback mode
         distr.init_setting('nbfallback', 'no')
+        # Send mail?
         distr.init_setting('mail', 'no')
+        # What to send mail with (currently only "sendmail")
+        distr.init_setting('mail.backend', 'sendmail')
+        # Sender address ("TellBot <tellbot@example.com>")
+        distr.init_setting('mail.from', None)
+        # Envelope sender address (derived from mail.from as default; no
+        # angled brackets)
+        distr.init_setting('mail.realfrom', None)
+        # Tag to prepend to the auto-generated subject in square brackets
+        distr.init_setting('mail.subjtag', None)
 
     def __init__(self, *args, **kwds):
         basebot.Bot.__init__(self, *args, **kwds)
