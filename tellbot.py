@@ -678,6 +678,19 @@ class Mailer:
     def send(self, message):
         raise NotImplementedError
 
+class MailerSendmail(Mailer):
+    def __init__(self, distr):
+        self.distr = distr
+
+    def allow_send(self, message):
+        info = self.distr.get_mail_info(message['to'])
+        if info is None: return False
+        if info[2] > time.time(): return False
+        return True
+
+    def send(self, message):
+        pass
+
 class TellBot(basebot.Bot):
     BOTNAME = 'TellBot'
     NICKNAME = 'TellBot'
