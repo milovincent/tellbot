@@ -672,6 +672,12 @@ class NotificationDistributorSQLite(NotificationDistributor):
             self.curs.execute('DELETE FROM messages WHERE delivered < ?',
                               (deadline,))
 
+class Mailer:
+    def allow_send(self, message):
+        raise NotImplementedError
+    def send(self, message):
+        raise NotImplementedError
+
 class TellBot(basebot.Bot):
     BOTNAME = 'TellBot'
     NICKNAME = 'TellBot'
