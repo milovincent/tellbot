@@ -685,7 +685,7 @@ class MailerSendmail(Mailer):
     def allow_send(self, message):
         info = self.distr.get_mail_info(message['to'])
         if info is None: return False
-        if info[2] > time.time(): return False
+        if info[2] is not None and info[2] > time.time(): return False
         return True
 
     def send(self, message):
