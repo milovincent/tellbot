@@ -3,9 +3,12 @@
 
 import sys, os, re, time
 import operator, collections
+import base64
 import fnmatch
 import threading
 import sqlite3
+
+from xml.sax.saxutils import escape
 
 try:
     from queue import Queue
@@ -28,6 +31,46 @@ To create or grow, or shrink a group of users, use
     !tgroup *group -@user1 [-@user2 ...] [-*group1 ...]
 For a thorough manual, see https://github.com/CylonicRaider/tellbot.
 '''[1:-1]
+
+EMAIL_NOTIFICATION_TEMPLATE = b'''
+From: %(from)s
+To: %(to)s
+Subject: %(subject)s
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="%(boundary)s"
+
+This is a multi-part MIME message.
+
+--%(boundary)s
+Content-Type: text/plain; charset=utf-8
+
+You have a new unread TellBot message (%(unread_total)s total).
+
+From: %(plain_from)s
+To: %(plain_to)s
+Text: %(plain_text)s
+
+Reply to this email to unsubscribe.
+
+--%(boundary)s
+Content-Type: text/html; charset=utf-8
+
+<!DOCTYPE html>
+<html>
+  <body>
+    <p>You have a new unread TellBot message (%(unread_totsl)s \
+total).</p>
+    <p><table border=0 cellpadding=0 cellspacing=2>
+      <tr><th align=left>From:</th><td>%(html_from)s</td></tr>
+      <tr><th align=left>To:</th><td>%(html_to)s</td></tr>
+      <tr><th align=left>Text:</th><th>%(html_text)s</td></tr>
+    </table></p>
+    <p><small>Reply to this email to unsubscribe.</small></p>
+  </body>
+</html>
+
+--%(boundary)s--
+'''
 
 def seminormalize_nick(nick):
     return re.sub(r'\s+', '', nick)
@@ -673,21 +716,46 @@ class NotificationDistributorSQLite(NotificationDistributor):
                               (deadline,))
 
 class Mailer:
-    def allow_send(self, message):
-        raise NotImplementedError
-    def send(self, message):
-        raise NotImplementedError
-
-class MailerSendmail(Mailer):
     def __init__(self, distr):
         self.distr = distr
 
     def allow_send(self, message):
         info = self.distr.get_mail_info(message['to'])
         if info is None: return False
-        if info[2] is not None and info[2] > time.time(): return False
+        if info[1] is not None and info[1] > time.time(): return False
         return True
 
+    def format_send(self, message):
+        def htmlenc(s):
+            return escape(s).encode('ascii', errors='xmlcharrefreplace')
+        minfo = self.distr.get_mail_info(message['to'])
+        sinfo = self.distr.query_seen(message['to'])
+        full_from = self.distr.get_setting('mail.from')
+        if full_from is None:
+            raise RuntimeError('mail.from not configured')
+        subject = 'New TellBot message (%s unread)' % sinfo[2]
+        subjtag = self.distr.get_setting('mail.subjtag')
+        if subjtag is not None: subject = '[%s] %s' % (subjtag, subject)
+        msg_from = make_mention(message['sender'])
+        msg_to = message['reason']
+        return EMAIL_NOTIFICATION_TEMPLATE % {
+            'from': full_from.encode('ascii'),
+            'to': minfo[0].encode('ascii'),
+            'subject': subject.encode('ascii'),
+            'boundary': base64.b64encode(os.urandom(16)),
+            'unread_total': sinfo[2],
+            'plain_from': msg_from.encode('utf-8'),
+            'plain_to': msg_to.encode('utf-8'),
+            'plain_text': message['text'].encode('utf-8'),
+            'html_from': htmlenc(msg_from),
+            'html_to': htmlenc(msg_to),
+            'html_text': htmlenc(message['text'])
+        }
+
+    def send(self, message):
+        raise NotImplementedError
+
+class MailerSendmail(Mailer):
     def send(self, message):
         pass
 
