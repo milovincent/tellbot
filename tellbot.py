@@ -772,7 +772,8 @@ class Mailer:
 class MailerSendmail(Mailer):
     def send(self, message):
         sender, recipient, data = self.format_send(message)
-        proc = subprocess.Popen(['sendmail', '-f', sender, recipient],
+        cmd = self.distr.get_setting('mail.sendmail.command')
+        proc = subprocess.Popen([cmd, '-f', sender, recipient],
                                 stdin=subprocess.PIPE)
         proc.stdin.write(re.sub('(?m)^\.', '..', data) + '\n.\n')
         return (proc.wait() == 0)
@@ -798,6 +799,8 @@ class TellBot(basebot.Bot):
         distr.init_setting('mail.realfrom', None)
         # Tag to prepend to the auto-generated subject in square brackets
         distr.init_setting('mail.subjtag', None)
+        # Which command to use as sendmail
+        distr.init_setting('mail.sendmail.command', 'sendmail')
 
     def __init__(self, *args, **kwds):
         basebot.Bot.__init__(self, *args, **kwds)
