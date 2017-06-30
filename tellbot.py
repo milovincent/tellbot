@@ -6,6 +6,7 @@ import operator, collections
 import base64
 import fnmatch
 import threading
+import subprocess
 import sqlite3
 
 from xml.sax.saxutils import escape
@@ -716,6 +717,11 @@ class NotificationDistributorSQLite(NotificationDistributor):
                               (deadline,))
 
 class Mailer:
+    @staticmethod
+    def extract_addrspec(address):
+        m = re.match('^[^<]+ <([^>]+)>$', full_from)
+        return m.group(1) if m else None
+
     def __init__(self, distr):
         self.distr = distr
 
@@ -733,12 +739,20 @@ class Mailer:
         full_from = self.distr.get_setting('mail.from')
         if full_from is None:
             raise RuntimeError('mail.from not configured')
+        real_from = self.distr.get_setting('mail.realfrom')
+        if real_from is None:
+            real_from = self.extract_addrspec(full_from)
+            if real_from is None:
+                raise RuntimeError('Ill-formatted mail.from')
+        real_to = self.extract_addrspec(minfo[0])
+        if real_to is None:
+            raise ValueError('Ill-formatted recipient address')
         subject = 'New TellBot message (%s unread)' % sinfo[2]
         subjtag = self.distr.get_setting('mail.subjtag')
         if subjtag is not None: subject = '[%s] %s' % (subjtag, subject)
         msg_from = make_mention(message['sender'])
         msg_to = message['reason']
-        return EMAIL_NOTIFICATION_TEMPLATE % {
+        return (real_from, real_to, EMAIL_NOTIFICATION_TEMPLATE % {
             'from': full_from.encode('ascii'),
             'to': minfo[0].encode('ascii'),
             'subject': subject.encode('ascii'),
@@ -750,14 +764,18 @@ class Mailer:
             'html_from': htmlenc(msg_from),
             'html_to': htmlenc(msg_to),
             'html_text': htmlenc(message['text'])
-        }
+        })
 
     def send(self, message):
         raise NotImplementedError
 
 class MailerSendmail(Mailer):
     def send(self, message):
-        pass
+        sender, recipient, data = self.format_send(message)
+        proc = subprocess.Popen(['sendmail', '-f', sender, recipient],
+                                stdin=subprocess.PIPE)
+        proc.stdin.write(re.sub('(?m)^\.', '..', data) + '\n.\n')
+        return (proc.wait() == 0)
 
 class TellBot(basebot.Bot):
     BOTNAME = 'TellBot'
