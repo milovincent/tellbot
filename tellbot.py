@@ -717,10 +717,26 @@ class NotificationDistributorSQLite(NotificationDistributor):
                               (deadline,))
 
 class Mailer:
-    @staticmethod
-    def extract_addrspec(address):
+    @classmethod
+    def extract_addrspec(cls, address):
         m = re.match('^[^<]+ <([^>]+)>$', full_from)
         return m.group(1) if m else None
+
+    @classmethod
+    def init_settings(cls, distr):
+        # Send mail?
+        distr.init_setting('mail', 'no')
+        # What to send mail with (currently only "sendmail")
+        distr.init_setting('mail.backend', 'sendmail')
+        # Sender address ("TellBot <tellbot@example.com>")
+        distr.init_setting('mail.from', None)
+        # Envelope sender address (derived from mail.from as default; no
+        # angled brackets)
+        distr.init_setting('mail.realfrom', None)
+        # Tag to prepend to the auto-generated subject in square brackets
+        distr.init_setting('mail.subjtag', None)
+        # Which command to use as sendmail
+        distr.init_setting('mail.sendmail.command', 'sendmail')
 
     def __init__(self, distr):
         self.distr = distr
@@ -788,19 +804,6 @@ class TellBot(basebot.Bot):
     def init_settings(cls, distr):
         # NotBot fallback mode
         distr.init_setting('nbfallback', 'no')
-        # Send mail?
-        distr.init_setting('mail', 'no')
-        # What to send mail with (currently only "sendmail")
-        distr.init_setting('mail.backend', 'sendmail')
-        # Sender address ("TellBot <tellbot@example.com>")
-        distr.init_setting('mail.from', None)
-        # Envelope sender address (derived from mail.from as default; no
-        # angled brackets)
-        distr.init_setting('mail.realfrom', None)
-        # Tag to prepend to the auto-generated subject in square brackets
-        distr.init_setting('mail.subjtag', None)
-        # Which command to use as sendmail
-        distr.init_setting('mail.sendmail.command', 'sendmail')
 
     def __init__(self, *args, **kwds):
         basebot.Bot.__init__(self, *args, **kwds)
@@ -1547,6 +1550,7 @@ class TellBotManager(basebot.BotManager):
         else:
             self.distributor = NotificationDistributorMemory()
         TellBot.init_settings(self.distributor)
+        Mailer.init_settings(self.distributor)
         for n, v in self.orig_conf:
             self.distributor.set_setting(n, v)
         self.children.append(GCThread(self.distributor))
