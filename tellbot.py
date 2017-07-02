@@ -509,9 +509,11 @@ class NotificationDistributorSQLite(NotificationDistributor):
                                   'name TEXT'
                               ')')
             # Mail table.
-            # user     is the fully normalized user name,
+            # user     is the alias base of the user,
             # address  is the full email address (@-mentions get mis-parsed),
             # throttle is the time when one may send again (or NULL).
+            # Inform users that changing their primary alias may prevent them
+            # from getting mail.
             self.curs.execute('CREATE TABLE IF NOT EXISTS mailinfo ('
                                   'user TEXT PRIMARY KEY,'
                                   'address TEXT,'
@@ -821,7 +823,7 @@ class MailerNull(Mailer):
         return False
 
     def send(self, message):
-        pass
+        return None
 
 class MailerSendmail(Mailer):
     def send(self, message):
@@ -831,7 +833,10 @@ class MailerSendmail(Mailer):
                                 stdin=subprocess.PIPE)
         proc.stdin.write(re.sub(b'(?m)^\.', b'..', data) + b'\n.\n')
         proc.stdin.close()
-        return (proc.wait() == 0)
+        if proc.wait() == 0:
+            return (sender, recipient, data)
+        else:
+            return None
 
 class TellBot(basebot.Bot):
     BOTNAME = 'TellBot'
@@ -991,9 +996,14 @@ class TellBot(basebot.Bot):
             distr.add_message(user, message)
             try:
                 if mailer.allow_send(message):
-                    mailer.send(message)
+                    res = mailer.send(message)
                     distr.update_mail_throttle(user, base['timestamp'] +
                                                MAIL_SEND_COOLOFF)
+                    if res is None:
+                        self.logger.info('Sending mail to @%s failed.' % nick)
+                    else:
+                        self.logger.info('Sent mail to @%s <%s>.' % (nick,
+                                                                     res[1]))
             except Exception as e:
                 self.logger.error('Error while sending mail', exc_info=True)
 
