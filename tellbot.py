@@ -822,9 +822,10 @@ class TellBot(basebot.Bot):
         else:
             return (make_mention if ping else seminormalize_nick)(nick)
 
-    def _format_users(self, users, groups, subject, prevent_self=False):
+    def _format_users(self, users, groups, subject, prevent_self=False,
+                      ping=True):
         if not users: return ('no-one', {})
-        tr = lambda x: self._format_nick(x[1], True, subject[1])
+        tr = lambda x: self._format_nick(x[1], ping, subject[1])
         seen, segnames, segments, reasons = set(), [], {}, {}
         for n, c in groups.items():
             if n.startswith('@'):
@@ -930,10 +931,10 @@ class TellBot(basebot.Bot):
                       'to reply to them.' % unread)
 
     def send_notify(self, distr, sender, recipients, groups, text, reply,
-                    reason=None):
+                    reason=None, ping=False):
         # Prevent messages to oneself unless explicit.
         reclist, reasons = self._format_users(recipients, groups, sender,
-                                              True)
+                                              True, ping)
 
         # Format fancy recipient list.
         text = (text or '').strip()
@@ -1122,7 +1123,7 @@ class TellBot(basebot.Bot):
                 self._log_command(cmdline)
                 # Parse arguments.
                 recipients = OrderedSet.firstel()
-                groups, text = collections.OrderedDict(), None
+                groups, text, ping = collections.OrderedDict(), None, False
                 it = iter(cmdline[1:])
                 while 1:
                     arg, count = parse_userlist(recipients, groups, it)
@@ -1136,6 +1137,8 @@ class TellBot(basebot.Bot):
                         except StopIteration:
                             pass
                         break
+                    elif arg == '--ping':
+                        ping = True
                     elif arg.startswith('--'):
                         reply('Unknown option %s.' % arg)
                         return
@@ -1145,7 +1148,7 @@ class TellBot(basebot.Bot):
 
                 # Actual hauling outlined into own function.
                 self.send_notify(distr, sender, recipients, groups, text,
-                                 reply)
+                                 reply, ping=ping)
 
             # @NotBot compatibility.
             elif cmdline[0] == '!notify':
@@ -1182,7 +1185,7 @@ class TellBot(basebot.Bot):
                     {'@' + recipient[0]: [recipient]},
                     meta['line'][cmdline[1].offset:],
                     reply,
-                    '<re> ' + make_mention(recipient[1]))
+                    reason='<re> ' + make_mention(recipient[1]))
 
             # Reply to a group.
             elif cmdline[0] == '!reply-all':
@@ -1208,7 +1211,7 @@ class TellBot(basebot.Bot):
                 # Send message.
                 self.send_notify(distr, sender, recipients, groups,
                     meta['line'][cmdline[1].offset:], reply,
-                    '<re> ' + reason)
+                    reason='<re> ' + reason)
 
             # Enumerate available groups.
             elif cmdline[0] == '!tgrouplist':
