@@ -244,6 +244,8 @@ class NotificationDistributor:
         raise NotImplementedError
     def update_mail_info(self, user, address, throttle):
         raise NotImplementedError
+    def update_mail_throttle(self, user, throttle):
+        raise NotImplementedError
     def init_setting(self, key, value):
         raise NotImplementedError
     def get_setting(self, key):
@@ -416,6 +418,12 @@ class NotificationDistributorMemory(NotificationDistributor):
     def update_mail_info(self, user, address, throttle):
         with self.lock:
             self.mailinfo[user] = [address, throttle]
+
+    def update_mail_throttle(self, user, throttle):
+        with self.lock:
+            entry = self.mailinfo.get(user)
+            if not entry or entry[1] >= throttle: return
+            entry[1] = throttle
 
     def init_setting(self, key, value):
         with self.lock:
@@ -692,6 +700,12 @@ class NotificationDistributorSQLite(NotificationDistributor):
         with self.lock:
             self.curs.execute('INSERT OR REPLACE INTO mailinfo '
                 'VALUES (?, ?, ?)', (user, address, throttle))
+
+    def update_mail_throttle(self, user, throttle):
+        with self.lock.committing:
+            self.curs.execute('UPDATE mailinfo SET throttle = ? '
+                'WHERE user = ? AND throttle < ?', (throttle, user,
+                                                    throttle))
 
     def init_setting(self, key, value):
         with self.lock.committing:
