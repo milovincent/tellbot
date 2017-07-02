@@ -430,7 +430,8 @@ class NotificationDistributorMemory(NotificationDistributor):
     def update_mail_throttle(self, user, throttle):
         with self.lock:
             entry = self.mailinfo.get(user)
-            if not entry or entry[1] >= throttle: return
+            if not entry or (entry[1] is not None and entry[1] >= throttle):
+                return
             entry[1] = throttle
 
     def init_setting(self, key, value):
@@ -712,8 +713,8 @@ class NotificationDistributorSQLite(NotificationDistributor):
     def update_mail_throttle(self, user, throttle):
         with self.lock.committing:
             self.curs.execute('UPDATE mailinfo SET throttle = ? '
-                'WHERE user = ? AND throttle < ?', (throttle, user,
-                                                    throttle))
+                'WHERE user = ? AND (throttle IS NULL OR throttle < ?)',
+                (throttle, user, throttle))
 
     def init_setting(self, key, value):
         with self.lock.committing:
