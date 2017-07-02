@@ -63,10 +63,10 @@ Content-Type: text/html; charset=utf-8
   <body>
     <p>You have a new unread TellBot message (%(unread_total)s \
 total).</p>
-    <p><table border=0 cellpadding=0 cellspacing=2>
-      <tr><th align=left>From:</th><td>%(html_from)s</td></tr>
-      <tr><th align=left>To:</th><td>%(html_to)s</td></tr>
-      <tr><th align=left>Text:</th><td>%(html_text)s</td></tr>
+    <p><table border=0 cellpadding=0 cellspacing=0>
+      <tr><th align=left>From:&nbsp;</th><td>%(html_from)s</td></tr>
+      <tr><th align=left>To:&nbsp;</th><td>%(html_to)s</td></tr>
+      <tr><th align=left>Text:&nbsp;</th><td>%(html_text)s</td></tr>
     </table></p>
     <p><small>Reply to this email to unsubscribe.</small></p>
   </body>
@@ -509,6 +509,9 @@ class NotificationDistributorSQLite(NotificationDistributor):
                                   'name TEXT'
                               ')')
             # Mail table.
+            # user     is the fully normalized user name,
+            # address  is the full email address (@-mentions get mis-parsed),
+            # throttle is the time when one may send again (or NULL).
             self.curs.execute('CREATE TABLE IF NOT EXISTS mailinfo ('
                                   'user TEXT PRIMARY KEY,'
                                   'address TEXT,'
@@ -779,7 +782,7 @@ class Mailer:
             return escape(s).encode('ascii',
                 errors='xmlcharrefreplace').decode('ascii')
         minfo = self.distr.get_mail_info(message['to'])
-        sinfo = self.distr.query_seen(message['to'])
+        binfo = self.distr.message_bounds(message['to'])
         full_from = self.distr.get_setting('mail.from')
         if full_from is None:
             raise RuntimeError('mail.from not configured')
@@ -791,8 +794,7 @@ class Mailer:
         real_to = self.extract_addrspec(minfo[0])
         if real_to is None:
             raise ValueError('Ill-formatted recipient address')
-        unread_total = sinfo[2] if sinfo is not None else 1
-        subject = 'New TellBot message (%s unread)' % unread_total
+        subject = 'New TellBot message (%s unread)' % binfo[0]
         subjtag = self.distr.get_setting('mail.subjtag')
         if subjtag is not None: subject = '[%s] %s' % (subjtag, subject)
         msg_from = make_mention(message['from'])
@@ -802,7 +804,7 @@ class Mailer:
             'to': asciienc(minfo[0]),
             'subject': asciienc(subject),
             'boundary': base64.b64encode(os.urandom(16)).decode('ascii'),
-            'unread_total': unread_total,
+            'unread_total': binfo[0],
             'plain_from': utfenc(msg_from),
             'plain_to': utfenc(msg_to),
             'plain_text': utfenc(message['text']),
