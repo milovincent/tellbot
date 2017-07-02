@@ -22,6 +22,8 @@ INBOX_CUTOFF = 172800 # 2 days
 REPLY_TIMEOUT = 172800 # 2 days
 GC_INTERVAL = 3600 # 1 hour
 NOTBOT_DELAY = 10 # 10 secs
+MAIL_DELIVER_COOLOFF = 172800 # 2 days
+MAIL_SEND_COOLOFF = 86400 # 1 day
 
 HELP_TEXT = '''
 To add a message to other users' mailbox, use
@@ -72,6 +74,12 @@ total).</p>
 
 --%(boundary)s--
 '''
+
+def is_true(s):
+    if isinstance(s, str):
+        return s.lower() in ('yes', 'true', 'on', 'y', '1')
+    else:
+        return bool(s)
 
 def seminormalize_nick(nick):
     return re.sub(r'\s+', '', nick)
@@ -951,8 +959,10 @@ class TellBot(basebot.Bot):
                       'them and reply to each with !reply-one or !reply-all '
                       'to reply to them.' % unread)
 
-    def send_notify(self, distr, sender, recipients, groups, text, reply,
+    def send_notify(self, sender, recipients, groups, text, reply,
                     reason=None, ping=False):
+        distr, mailer = self.manager.distr, self.manager.mailer
+
         # Prevent messages to oneself unless explicit.
         reclist, reasons = self._format_users(recipients, groups, sender,
                                               True, ping)
@@ -967,8 +977,12 @@ class TellBot(basebot.Bot):
         base = {'text': text, 'from': sender[1], 'timestamp': time.time()}
         for user, nick in recipients:
             cur_reason = reason or reasons[user]
-            distr.add_message(user, dict(base, tonick=nick,
-                                         reason=cur_reason))
+            message = dict(base, to=user, tonick=nick, reason=cur_reason)
+            distr.add_message(user, message)
+            if mailer.allow_send(message):
+                mailer.send(message)
+                distr.update_mail_throttle(user, base['timestamp'] +
+                                           MAIL_SEND_COOLOFF)
 
         # Reply.
         reply('Will tell %s.' % reclist)
@@ -1012,6 +1026,7 @@ class TellBot(basebot.Bot):
         deliver_message()
         distr.update_seen(sender[0], sender[1], now, 0,
                           self.roomname)
+        distr.update_mail_throttle(sender[0], now + MAIL_DELIVER_COOLOFF)
 
         # ...Or none.
         if not messages:
@@ -1168,8 +1183,8 @@ class TellBot(basebot.Bot):
                         break
 
                 # Actual hauling outlined into own function.
-                self.send_notify(distr, sender, recipients, groups, text,
-                                 reply, ping=ping)
+                self.send_notify(sender, recipients, groups, text, reply,
+                                 ping=ping)
 
             # @NotBot compatibility.
             elif cmdline[0] == '!notify':
@@ -1200,7 +1215,6 @@ class TellBot(basebot.Bot):
 
                 # Send message.
                 self.send_notify(
-                    distr,
                     sender,
                     OrderedSet.firstel((recipient,)),
                     {'@' + recipient[0]: [recipient]},
@@ -1230,7 +1244,7 @@ class TellBot(basebot.Bot):
                 recipients = OrderedSet.firstel(groups[reason])
 
                 # Send message.
-                self.send_notify(distr, sender, recipients, groups,
+                self.send_notify(sender, recipients, groups,
                     meta['line'][cmdline[1].offset:], reply,
                     reason='<re> ' + reason)
 
@@ -1577,6 +1591,15 @@ class TellBotManager(basebot.BotManager):
         Mailer.init_settings(self.distributor)
         for n, v in self.orig_conf:
             self.distributor.set_setting(n, v)
+        do_mail = self.distributor.get_setting('mail')
+        mail_backend = self.distributor.get_setting('mail.backend')
+        if not is_true(do_mail) or mail_backend == 'null':
+            self.mailer = MailerNull(self.distributor)
+        elif mail_backend == 'sendmail':
+            self.mailer = MailerSendmail(self.distributor)
+        else:
+            raise RuntimeError('mail.backend not configured although mail '
+                'is enabled')
         self.children.append(GCThread(self.distributor))
 
 if __name__ == '__main__': basebot.run_main(TellBot, mgrcls=TellBotManager)
