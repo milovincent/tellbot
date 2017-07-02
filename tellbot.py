@@ -35,7 +35,7 @@ To create or grow, or shrink a group of users, use
 For a thorough manual, see https://github.com/CylonicRaider/tellbot.
 '''[1:-1]
 
-EMAIL_NOTIFICATION_TEMPLATE = b'''
+EMAIL_NOTIFICATION_TEMPLATE = '''\
 From: %(from)s
 To: %(to)s
 Subject: %(subject)s
@@ -61,12 +61,12 @@ Content-Type: text/html; charset=utf-8
 <!DOCTYPE html>
 <html>
   <body>
-    <p>You have a new unread TellBot message (%(unread_totsl)s \
+    <p>You have a new unread TellBot message (%(unread_total)s \
 total).</p>
     <p><table border=0 cellpadding=0 cellspacing=2>
       <tr><th align=left>From:</th><td>%(html_from)s</td></tr>
       <tr><th align=left>To:</th><td>%(html_to)s</td></tr>
-      <tr><th align=left>Text:</th><th>%(html_text)s</td></tr>
+      <tr><th align=left>Text:</th><td>%(html_text)s</td></tr>
     </table></p>
     <p><small>Reply to this email to unsubscribe.</small></p>
   </body>
@@ -742,7 +742,7 @@ class NotificationDistributorSQLite(NotificationDistributor):
 class Mailer:
     @classmethod
     def extract_addrspec(cls, address):
-        m = re.match('^[^<]+ <([^>]+)>$', full_from)
+        m = re.match('^[^<]+ <([^>]+)>$', address)
         return m.group(1) if m else None
 
     @classmethod
@@ -771,8 +771,13 @@ class Mailer:
         return True
 
     def format_send(self, message):
+        def asciienc(s):
+            return s.encode('ascii').decode('ascii')
+        def utfenc(s):
+            return s
         def htmlenc(s):
-            return escape(s).encode('ascii', errors='xmlcharrefreplace')
+            return escape(s).encode('ascii',
+                errors='xmlcharrefreplace').decode('ascii')
         minfo = self.distr.get_mail_info(message['to'])
         sinfo = self.distr.query_seen(message['to'])
         full_from = self.distr.get_setting('mail.from')
@@ -786,24 +791,25 @@ class Mailer:
         real_to = self.extract_addrspec(minfo[0])
         if real_to is None:
             raise ValueError('Ill-formatted recipient address')
-        subject = 'New TellBot message (%s unread)' % sinfo[2]
+        unread_total = sinfo[2] if sinfo is not None else 1
+        subject = 'New TellBot message (%s unread)' % unread_total
         subjtag = self.distr.get_setting('mail.subjtag')
         if subjtag is not None: subject = '[%s] %s' % (subjtag, subject)
-        msg_from = make_mention(message['sender'])
+        msg_from = make_mention(message['from'])
         msg_to = message['reason']
-        return (real_from, real_to, EMAIL_NOTIFICATION_TEMPLATE % {
-            'from': full_from.encode('ascii'),
-            'to': minfo[0].encode('ascii'),
-            'subject': subject.encode('ascii'),
-            'boundary': base64.b64encode(os.urandom(16)),
-            'unread_total': sinfo[2],
-            'plain_from': msg_from.encode('utf-8'),
-            'plain_to': msg_to.encode('utf-8'),
-            'plain_text': message['text'].encode('utf-8'),
+        return (real_from, real_to, (EMAIL_NOTIFICATION_TEMPLATE % {
+            'from': asciienc(full_from),
+            'to': asciienc(minfo[0]),
+            'subject': asciienc(subject),
+            'boundary': base64.b64encode(os.urandom(16)).decode('ascii'),
+            'unread_total': unread_total,
+            'plain_from': utfenc(msg_from),
+            'plain_to': utfenc(msg_to),
+            'plain_text': utfenc(message['text']),
             'html_from': htmlenc(msg_from),
             'html_to': htmlenc(msg_to),
             'html_text': htmlenc(message['text'])
-        })
+        }).encode('utf-8'))
 
     def send(self, message):
         raise NotImplementedError
@@ -821,7 +827,8 @@ class MailerSendmail(Mailer):
         cmd = self.distr.get_setting('mail.sendmail.command')
         proc = subprocess.Popen([cmd, '-f', sender, recipient],
                                 stdin=subprocess.PIPE)
-        proc.stdin.write(re.sub('(?m)^\.', '..', data) + '\n.\n')
+        proc.stdin.write(re.sub(b'(?m)^\.', b'..', data) + b'\n.\n')
+        proc.stdin.close()
         return (proc.wait() == 0)
 
 class TellBot(basebot.Bot):
@@ -962,7 +969,7 @@ class TellBot(basebot.Bot):
 
     def send_notify(self, sender, recipients, groups, text, reply,
                     reason=None, ping=False):
-        distr, mailer = self.manager.distr, self.manager.mailer
+        distr, mailer = self.manager.distributor, self.manager.mailer
 
         # Prevent messages to oneself unless explicit.
         reclist, reasons = self._format_users(recipients, groups, sender,
@@ -980,10 +987,13 @@ class TellBot(basebot.Bot):
             cur_reason = reason or reasons[user]
             message = dict(base, to=user, tonick=nick, reason=cur_reason)
             distr.add_message(user, message)
-            if mailer.allow_send(message):
-                mailer.send(message)
-                distr.update_mail_throttle(user, base['timestamp'] +
-                                           MAIL_SEND_COOLOFF)
+            try:
+                if mailer.allow_send(message):
+                    mailer.send(message)
+                    distr.update_mail_throttle(user, base['timestamp'] +
+                                               MAIL_SEND_COOLOFF)
+            except Exception as e:
+                self.logger.error('Error while sending mail', exc_info=True)
 
         # Reply.
         reply('Will tell %s.' % reclist)
