@@ -799,6 +799,13 @@ class Mailer:
     def send(self, message):
         raise NotImplementedError
 
+class MailerNull(Mailer):
+    def allow_send(self, message):
+        return False
+
+    def send(self, message):
+        pass
+
 class MailerSendmail(Mailer):
     def send(self, message):
         sender, recipient, data = self.format_send(message)
