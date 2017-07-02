@@ -39,14 +39,19 @@ command.
 
 ### !tell a.k.a. !tnotify
 
-    !tell <user-list> [--] <message>
-    !tnotify <user-list> [--] <message>
+    !tell [--ping] <user-list> [--] <message>
+    !tnotify [--ping] <user-list> [--] <message>
 
 Schedule `message` to be delivered to all users in the given
 [`user-list`](#user-lists). A `--` separator may be used to separate the
 recipients from the message body (such as when the message starts with an
 @-mention); it is not included in the delivered message. (To send a message
 starting with a double dash, duplicate the separator.)
+
+`@TellBot` displays a breakdown of the users the message will actually be
+delivered to as a reply to the command. Unless `--ping` is passed, users on
+the list are not @-mentioned to allow sending messages of low importance
+without disturbing the recipients.
 
 If the message is empty (or consists of only whitespace), it is dropped (and
 the potential recipients are not notified), but the list of recipients is
