@@ -77,6 +77,14 @@ closeness to the corresponding `@NotBot` command.
 
     !tell *group -- @somebot stopped working, can you check?
 
+#### !notify
+
+Depending on the configuration, `@TellBot` may respond to a `!notify` command
+in the same way as to a `!tell`, either immediately, or after a delay (and
+unless something else does), or not at all. This (if enabled) renders
+`@TellBot` a failsafe for a `@NotBot` instance running in the same room, in
+case the latter goes down.
+
 ### !reply-one and !reply-all
 
     !reply-one <message>
