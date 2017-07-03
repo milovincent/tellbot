@@ -22,8 +22,8 @@ INBOX_CUTOFF = 172800 # 2 days
 REPLY_TIMEOUT = 172800 # 2 days
 GC_INTERVAL = 3600 # 1 hour
 NOTBOT_DELAY = 10 # 10 secs
-MAIL_DELIVER_COOLOFF = 172800 # 2 days
-MAIL_SEND_COOLOFF = 86400 # 1 day
+MAIL_DELIVER_COOLOFF = 604800 # 1 week
+MAIL_SEND_COOLOFF = 604800 # 1 week
 
 HELP_TEXT = '''
 To add a message to other users' mailbox, use
