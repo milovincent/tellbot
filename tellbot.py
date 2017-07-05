@@ -777,11 +777,12 @@ class Mailer:
     def __init__(self, distr):
         self.distr = distr
 
-    def allow_send(self, message, is_urgent):
+    def allow_send(self, message):
         info = self.distr.get_mail_info(message['to'])
-        if info is None:
+        if info is None or message.get('priority') == 'LOW':
             return False
-        elif not is_urgent and info[1] is not None and info[1] > time.time():
+        elif (message.get('priority') != 'URGENT' and info[1] is not None and
+              info[1] > time.time()):
             return False
         else:
             return True
@@ -1007,7 +1008,7 @@ class TellBot(basebot.Bot):
             message = dict(base, to=user, tonick=nick, reason=cur_reason)
             distr.add_message(user, message)
             try:
-                if mailer.allow_send(message, (priority == 'URGENT')):
+                if mailer.allow_send(message):
                     res = mailer.send(message)
                     distr.update_mail_throttle(user, base['timestamp'] +
                                                MAIL_SEND_COOLOFF)
@@ -1212,14 +1213,18 @@ class TellBot(basebot.Bot):
                     elif arg == '--ping':
                         ping = True
                     elif arg.startswith('--priority'):
-                        if arg[10:] == '':
+                        if len(arg) <= 10:
                             try:
                                 priority = next(it)
+                                continue
                             except StopIteration:
                                 reply('Missing message priority.')
                                 return
                         elif arg[10] != '=':
                             reply('Unknown option %s.' % arg)
+                            return
+                        elif len(arg) <= 11:
+                            reply('Missing message priority.')
                             return
                         priority = arg[11:]
                     elif arg.startswith('--'):
