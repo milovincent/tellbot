@@ -480,7 +480,8 @@ class NotificationDistributorSQLite(NotificationDistributor):
                                   'text TEXT,'
                                   'timestamp REAL,'
                                   'delivered_to TEXT UNIQUE,'
-                                  'delivered REAL'
+                                  'delivered REAL,'
+                                  'priority TEXT'
                               ')')
             # Group table.
             self.curs.execute('CREATE TABLE IF NOT EXISTS groups ('
@@ -531,17 +532,25 @@ class NotificationDistributorSQLite(NotificationDistributor):
                 if coldesc.partition(' ')[0] not in seencols:
                     self.curs.execute('ALTER TABLE seen '
                         'ADD COLUMN ' + coldesc)
+            self.curs.execute('PRAGMA table_info(messages);')
+            msgcols = set(i[1] for i in self.curs.fetchall())
+            for coldesc in ('priority TEXT',):
+                if coldesc.partition(' ')[0] not in msgcols:
+                    self.curs.execute('ALTER TABLE messages '
+                        'ADD COLUMN ' + coldesc)
 
     def _unwrap_message(self, item):
         return {'id': item[0], 'from': item[1], 'to': item[2],
                 'reason': item[3], 'text': item[4], 'timestamp': item[5],
-                'delivered_to': item[6], 'delivered': item[7]}
+                'delivered_to': item[6], 'delivered': item[7],
+                'priority': item[8]}
     def _unwrap_messages(self, it):
         return list(map(self._unwrap_message, it))
     def _wrap_message(self, message):
         return (message.get('id'), message['from'], message['to'],
                 message['reason'], message['text'], message['timestamp'],
-                message.get('delivered_to'), message.get('delivered'))
+                message.get('delivered_to'), message.get('delivered'),
+                message.get('priority'))
 
     def query_user(self, name):
         ret = self.normalize_user(name)
@@ -669,10 +678,10 @@ class NotificationDistributorSQLite(NotificationDistributor):
 
     def pop_messages(self, user, stale=False):
         with self.lock.committing:
-            query = ('SELECT _rowid_, sender, reason, text, timestamp '
-                'FROM messages WHERE recipient IN (SELECT user FROM aliases '
-                    'WHERE base = (SELECT base FROM aliases WHERE user = ?) '
-                'UNION SELECT ?) %s ORDER BY timestamp') % (
+            query = ('SELECT _rowid_, * FROM messages '
+                'WHERE recipient IN (SELECT user FROM aliases WHERE base = '
+                    '(SELECT base FROM aliases WHERE user = ?) '
+                    'UNION SELECT ?) %s ORDER BY timestamp') % (
                 '' if stale else 'AND delivered IS NULL')
             self.curs.execute(query, (user, user))
             msgs = self.curs.fetchall()
@@ -680,14 +689,13 @@ class NotificationDistributorSQLite(NotificationDistributor):
             self.curs.executemany('UPDATE messages SET delivered = ? '
                 'WHERE _rowid_ = ? AND delivered IS NULL',
                 ((now, i[0]) for i in msgs))
-            return self._unwrap_messages((i, s, user, w, c, t, None, None)
-                                         for i, s, w, c, t in msgs)
+            return self._unwrap_messages(msgs)
 
     def add_message(self, user, message):
         message['to'] = user
         with self.lock.committing:
             self.curs.execute('INSERT INTO messages '
-                'VALUES (?, ?, ?, ?, ?, ?, ?)',
+                'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
                 self._wrap_message(message)[1:])
 
     def query_delivery(self, msgid):
@@ -769,11 +777,14 @@ class Mailer:
     def __init__(self, distr):
         self.distr = distr
 
-    def allow_send(self, message):
+    def allow_send(self, message, is_urgent):
         info = self.distr.get_mail_info(message['to'])
-        if info is None: return False
-        if info[1] is not None and info[1] > time.time(): return False
-        return True
+        if info is None:
+            return False
+        elif not is_urgent and info[1] is not None and info[1] > time.time():
+            return False
+        else:
+            return True
 
     def format_send(self, message):
         def asciienc(s):
@@ -975,7 +986,7 @@ class TellBot(basebot.Bot):
                       'to reply to them.' % unread)
 
     def send_notify(self, sender, recipients, groups, text, reply,
-                    reason=None, ping=False):
+                    reason=None, priority='normal', ping=False):
         distr, mailer = self.manager.distributor, self.manager.mailer
 
         # Prevent messages to oneself unless explicit.
@@ -989,13 +1000,14 @@ class TellBot(basebot.Bot):
             return
 
         # Schedule messages.
-        base = {'text': text, 'from': sender[1], 'timestamp': time.time()}
+        base = {'text': text, 'from': sender[1], 'timestamp': time.time(),
+                'priority': priority}
         for user, nick in recipients:
             cur_reason = reason or reasons[user]
             message = dict(base, to=user, tonick=nick, reason=cur_reason)
             distr.add_message(user, message)
             try:
-                if mailer.allow_send(message):
+                if mailer.allow_send(message, (priority == 'URGENT')):
                     res = mailer.send(message)
                     distr.update_mail_throttle(user, base['timestamp'] +
                                                MAIL_SEND_COOLOFF)
@@ -1182,7 +1194,8 @@ class TellBot(basebot.Bot):
                 self._log_command(cmdline)
                 # Parse arguments.
                 recipients = OrderedSet.firstel()
-                groups, text, ping = collections.OrderedDict(), None, False
+                groups = collections.OrderedDict()
+                text, priority, ping = None, 'normal', False
                 it = iter(cmdline[1:])
                 while 1:
                     arg, count = parse_userlist(recipients, groups, it)
@@ -1198,6 +1211,17 @@ class TellBot(basebot.Bot):
                         break
                     elif arg == '--ping':
                         ping = True
+                    elif arg.startswith('--priority'):
+                        if arg[10:] == '':
+                            try:
+                                priority = next(it)
+                            except StopIteration:
+                                reply('Missing message priority.')
+                                return
+                        elif arg[10] != '=':
+                            reply('Unknown option %s.' % arg)
+                            return
+                        priority = arg[11:]
                     elif arg.startswith('--'):
                         reply('Unknown option %s.' % arg)
                         return
@@ -1205,9 +1229,19 @@ class TellBot(basebot.Bot):
                         text = meta['line'][arg.offset:]
                         break
 
+                priority = priority.upper()
+                if priority not in ('LOW', 'NORMAL', 'URGENT'):
+                    reply('Unknown priority %s.' % priority)
+                    return
+                elif (priority == 'URGENT' and
+                        not meta['msg'].sender.is_manager and
+                        not meta['msg'].sender.is_staff):
+                    reply('Only room hosts may send urgent messages.')
+                    return
+
                 # Actual hauling outlined into own function.
                 self.send_notify(sender, recipients, groups, text, reply,
-                                 ping=ping)
+                                 priority=priority, ping=ping)
 
             # @NotBot compatibility.
             elif cmdline[0] == '!notify':
