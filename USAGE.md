@@ -39,8 +39,8 @@ command.
 
 ### !tell a.k.a. !tnotify
 
-    !tell [--ping] <user-list> [--] <message>
-    !tnotify [--ping] <user-list> [--] <message>
+    !tell [--ping] [--priority=<level>] <user-list> [--] <message>
+    !tnotify [--ping] [--priority=<level>] <user-list> [--] <message>
 
 Schedule `message` to be delivered to all users in the given
 [`user-list`](#user-lists). A `--` separator may be used to separate the
@@ -52,6 +52,18 @@ starting with a double dash, duplicate the separator.)
 delivered to as a reply to the command. Unless `--ping` is passed, users on
 the list are not @-mentioned to allow sending messages of low importance
 without disturbing the recipients.
+
+Each message has an associated priority that determines whether and with how
+much effort the recipient will be notified of it (_i.e._, currently, whether
+an email notification will be sent if the user has opted in). Matching is
+case-insensitive. The priority levels are:
+- `LOW`: A notification will never be sent.
+- `NORMAL`: A notification will be sent if the user had been away for some
+  time (the default is a week) and has not received another notification in
+  some time (the default is a week as well).
+- `URGENT`: A notification will be dispatched immediately and
+  unconditionally. To prevent abuse, this level is only available to room
+  hosts (and/or site staff).
 
 If the message is empty (or consists of only whitespace), it is dropped (and
 the potential recipients are not notified), but the list of recipients is
