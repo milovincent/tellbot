@@ -51,6 +51,7 @@ You have a new unread TellBot message (%(unread_total)s total).
 
 From: %(plain_from)s
 To: %(plain_to)s
+Priority: %(plain_prio)s
 Text: %(plain_text)s
 
 Reply to this email to unsubscribe.
@@ -66,6 +67,7 @@ total).</p>
     <p><table border=0 cellpadding=0 cellspacing=0>
       <tr><th align=left>From:&nbsp;</th><td>%(html_from)s</td></tr>
       <tr><th align=left>To:&nbsp;</th><td>%(html_to)s</td></tr>
+      <tr><th align=left>Priority:&nbsp;</th><td>%(html_prio)s</td></tr>
       <tr><th align=left>Text:&nbsp;</th><td>%(html_text)s</td></tr>
     </table></p>
     <p><small>Reply to this email to unsubscribe.</small></p>
@@ -813,6 +815,7 @@ class Mailer:
         if subjtag is not None: subject = '[%s] %s' % (subjtag, subject)
         msg_from = make_mention(message['from'])
         msg_to = message['reason']
+        msg_priority = message['priority']
         return (real_from, real_to, (EMAIL_NOTIFICATION_TEMPLATE % {
             'from': asciienc(full_from),
             'to': asciienc(minfo[0]),
@@ -821,9 +824,11 @@ class Mailer:
             'unread_total': binfo[0],
             'plain_from': utfenc(msg_from),
             'plain_to': utfenc(msg_to),
+            'plain_prio': utfenc(msg_priority),
             'plain_text': utfenc(message['text']),
             'html_from': htmlenc(msg_from),
             'html_to': htmlenc(msg_to),
+            'html_prio': htmlenc(msg_priority),
             'html_text': htmlenc(message['text'])
         }).encode('utf-8'))
 
