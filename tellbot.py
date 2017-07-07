@@ -810,12 +810,13 @@ class Mailer:
         real_to = self.extract_addrspec(minfo[0])
         if real_to is None:
             raise ValueError('Ill-formatted recipient address')
-        subject = 'New TellBot message (%s unread)' % binfo[0]
+        msg_priority = message['priority']
+        subject = 'New%s TellBot message (%s unread)' % (
+            (' urgent' if msg_priority == 'URGENT' else ''), binfo[0])
         subjtag = self.distr.get_setting('mail.subjtag')
         if subjtag is not None: subject = '[%s] %s' % (subjtag, subject)
         msg_from = make_mention(message['from'])
         msg_to = message['reason']
-        msg_priority = message['priority']
         return (real_from, real_to, (EMAIL_NOTIFICATION_TEMPLATE % {
             'from': asciienc(full_from),
             'to': asciienc(minfo[0]),
