@@ -35,7 +35,10 @@ To create or grow, or shrink a group of users, use
 For a thorough manual, see https://github.com/CylonicRaider/tellbot.
 '''[1:-1]
 
-EMAIL_NOTIFICATION_TEMPLATE = '''\
+REPLY_HELP = ('Reply with a !reply to any single message to reply to the '
+    'author, or with a !reply-all to reply to the whole group (if any).')
+
+EMAIL_NOTIFICATION_TEMPLATE = '''
 From: %(from)s
 To: %(to)s
 Subject: %(subject)s
@@ -75,7 +78,7 @@ total).</p>
 </html>
 
 --%(boundary)s--
-'''
+'''[1:]
 
 def is_true(s):
     if isinstance(s, str):
@@ -984,13 +987,11 @@ class TellBot(basebot.Bot):
             elif oldest is not None and oldest >= now - INBOX_CUTOFF:
                 self.deliver_notifies(distr, user, reply, False)
             elif unread == 1:
-                reply('You have 1 unread message; use !inbox to read it and '
-                      'reply to it with !reply-one or !reply-all to reply to '
-                      'it.')
+                reply('You have 1 unread message; use !inbox to read it. ' +
+                      REPLY_HELP)
             elif unread > 1:
                 reply('You have %s unread messages; use !inbox to read '
-                      'them and reply to each with !reply-one or !reply-all '
-                      'to reply to them.' % unread)
+                      'them. ' + REPLY_HELP)
 
     def send_notify(self, sender, recipients, groups, text, reply,
                     reason=None, priority='normal', ping=False):
