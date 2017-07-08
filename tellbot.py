@@ -1269,7 +1269,7 @@ class TellBot(basebot.Bot):
                         _id=meta['msgid'])
 
             # Reply to a freshly delivered message.
-            elif cmdline[0] == '!reply-one':
+            elif cmdline[0] == '!reply':
                 self._log_command(cmdline)
                 # Determine recipient.
                 if meta['msg']['parent'] is None:

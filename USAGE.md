@@ -97,28 +97,28 @@ unless something else does), or not at all. This (if enabled) renders
 `@TellBot` a failsafe for a `@NotBot` instance running in the same room, in
 case the latter goes down.
 
-### !reply-one and !reply-all
+### !reply and !reply-all
 
-    !reply-one <message>
+    !reply <message>
     !reply-all <message>
 
 If (and only if) used as direct replies to delivered messages that are not
 older than some implementation-defined time (_i.e._ one hour), these commands
-will send a message back to the sender of the received message (`!reply-one`)
-or the group the message was sent to (`!reply-all`). If the message was not
-sent to a group, both behave equivalently.
+will send a message back to the sender of the received message (`!reply`) or
+the group the message was sent to (`!reply-all`). If the message was not sent
+to a group, both behave equivalently.
 
 The message starts immediately after the command (and can in particular start
 with any character). Implicit self exclusion happens in the case of
-`!reply-all`, and does not happen for `!reply-one`.
+`!reply-all`, and does not happen for `!reply`.
 
 **Examples**
 
     [Yourself to yourself, 5s ago] some message
-      !reply-one some reply
+      !reply some reply
 
     [person to *group, 5s ago] another message
-      !reply-one Can you clarify that a bit?
+      !reply Can you clarify that a bit?
 
     [person to *group, 5s ago] yet another message
       !reply-all another reply
