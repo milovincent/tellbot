@@ -1021,10 +1021,11 @@ class TellBot(basebot.Bot):
                     distr.update_mail_throttle(user, base['timestamp'] +
                                                MAIL_SEND_COOLOFF)
                     if res is None:
-                        self.logger.info('Sending mail to @%s failed.' % nick)
+                        self.logger.info('Sending mail to @%s failed.' %
+                                         nick)
                     else:
-                        self.logger.info('Sent mail to @%s <%s>.' % (nick,
-                                                                     res[1]))
+                        self.logger.info('Sent mail to @%s <%s>.' %
+                                         (nick, res[1]))
             except Exception as e:
                 self.logger.error('Error while sending mail', exc_info=True)
 
