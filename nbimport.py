@@ -33,14 +33,27 @@ import tellbot
 #   case; without whitespace; without the leading @ sign)
 # - Groups may be empty
 
-def import_messages(f, distr):
+def import_messages(f, distr, seen):
     with distr.lock.committing:
+        seendat = {}
         for recipient, messages in json.load(f).items():
             for item in messages:
                 msg = {'from': item[1], 'to': recipient, 'reason': item[0],
                        'text': item[2], 'timestamp': item[3],
                        'priority': 'NORMAL'}
                 distr.add_message(recipient, msg)
+                if seen:
+                    normsender = distr.normalize_user(item[1])
+                    old_ent = seendat.get(normsender[0])
+                    if old_ent is None or old_ent[1] < item[3]:
+                        seendat[normsender[0]] = (normsender[1], item[3])
+        for user, entry in seendat.items():
+            old_seen = distr.query_seen(user)
+            if old_seen is None:
+                distr.update_seen(user, entry[0], entry[1], 0, None)
+            elif old_seen[1] < entry[1]:
+                distr.update_seen(user, entry[0], entry[1], old_seen[2],
+                                  old_seen[3])
 
 def import_groups(f, distr):
     with distr.lock.committing:
@@ -53,7 +66,7 @@ def import_groups(f, distr):
 
 def main():
     parser = optparse.OptionParser(usage='%prog [-h|--help] '
-            '[--messages=path] [--groups=path] msgdb',
+            '[--messages=path] [--seen] [--groups=path] msgdb',
         description='Import data from @NotBot into a @TellBot database.\n'
             'WARNING: The operation is NOT idempotent; importing the same '
             'messages twice will cause duplication.',
@@ -62,6 +75,9 @@ def main():
     parser.add_option('--messages', action='append', dest='messages',
                       metavar='path', default=[],
                       help='read messages from JSON file (may be repeated)')
+    parser.add_option('--seen', action='store_true', dest='seen',
+                      default=False, help='harvest seen data from messages '
+                      'being imported')
     parser.add_option('--groups', action='append', dest='groups',
                       metavar='path', default=[],
                       help='read groups from JSON file (may be repeated)')
@@ -70,12 +86,12 @@ def main():
         parser.error('missing message database')
     elif len(args) > 1:
         parser.error('excess command line arguments')
-    msgfiles, groupfiles, dbpath = options.messages, options.groups, args[0]
+    dbpath = args[0]
     distr = tellbot.NotificationDistributorSQLite(dbpath)
-    for p in msgfiles:
+    for p in options.messages:
         with open(p) as f:
-            import_messages(f, distr)
-    for p in groupfiles:
+            import_messages(f, distr, options.seen)
+    for p in options.groups:
         with open(p) as f:
             import_groups(f, distr)
 

@@ -228,7 +228,7 @@ class NotificationDistributor:
         raise NotImplementedError
     def query_seen(self, user):
         raise NotImplementedError
-    def update_seen(self, user, name, time, unread):
+    def update_seen(self, user, name, time, unread, room):
         raise NotImplementedError
     def list_groups(self):
         raise NotImplementedError
