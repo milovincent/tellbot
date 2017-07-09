@@ -32,7 +32,8 @@ To add a message to other users' mailbox, use
 To create or grow, or shrink a group of users, use
     !tgroup *group @user1 [@user2 ...] [*group1 ...]
     !tgroup *group -@user1 [-@user2 ...] [-*group1 ...]
-For a thorough manual, see https://github.com/CylonicRaider/tellbot.
+For a thorough manual, see https://github.com/CylonicRaider/tellbot/\
+blob/master/USAGE.md.
 '''[1:-1]
 
 REPLY_HELP = ('Reply with a !reply to any single message to reply to the '
