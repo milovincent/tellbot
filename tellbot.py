@@ -991,8 +991,8 @@ class TellBot(basebot.Bot):
                 reply('You have 1 unread message; use !inbox to read it. ' +
                       REPLY_HELP)
             elif unread > 1:
-                reply('You have %s unread messages; use !inbox to read '
-                      'them. ' + REPLY_HELP)
+                reply(('You have %s unread messages; use !inbox to read '
+                       'them. ' % unread) + REPLY_HELP)
 
     def send_notify(self, sender, recipients, groups, text, reply,
                     reason=None, priority='normal', ping=False):
