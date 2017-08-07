@@ -882,9 +882,9 @@ class TellBot(basebot.Bot):
         nnick = basebot.normalize_nick(nick)
         ttr = (titlefirst if title else lambda x: x)
         if subject and nnick == basebot.normalize_nick(subject):
-            return ttr('yourself')
+            return ttr('you')
         elif nnick == basebot.normalize_nick(self.nickname):
-            return ttr('myself')
+            return ttr('me')
         else:
             return (make_mention if ping else seminormalize_nick)(nick)
 
