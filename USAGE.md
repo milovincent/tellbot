@@ -162,7 +162,7 @@ it until it is replaced.
     !tgroup *group
       Group: *group
       Description: A demonstration group.
-      Members (1): -none-
+      Members: -none-
 
 ### !tgrouplist
 
