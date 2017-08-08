@@ -32,10 +32,10 @@ command.
       No mail.
 
     !inbox
-      [Yourself to yourself, 2d 5m ago] message
+      [You, 2d 5m ago] message
 
     !inbox --stale
-      [Yourself to yourself, 2d 5m 13s ago] message
+      [You, 2d 5m 13s ago] message
 
 ### !tell a.k.a. !tnotify
 
@@ -114,7 +114,7 @@ with any character). Implicit self exclusion happens in the case of
 
 **Examples**
 
-    [Yourself to yourself, 5s ago] some message
+    [You, 5s ago] some message
       !reply some reply
 
     [person to *group, 5s ago] another message
