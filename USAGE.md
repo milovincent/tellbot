@@ -21,10 +21,10 @@ To immediately comment on the messages, you can also (after a `--` separator)
 post comments in the same message as the command; this is discouraged and may
 change in the future.
 
-If a user has been away for a long time (_i.e._ more than a day), `@TellBot`
-does not deliver notifies immediately upon any message of the recipient (as
-some others do), but instead shows a notification, which advises to use this
-command.
+If a user has been away for a long time (_i.e._ more than two days),
+`@TellBot` does not deliver notifies immediately upon any message of the
+recipient (as some other bots do), but instead shows a notification, which
+advises to use this command.
 
 **Examples**
 
@@ -103,7 +103,7 @@ case the latter goes down.
     !reply-all <message>
 
 If (and only if) used as direct replies to delivered messages that are not
-older than some implementation-defined time (_i.e._ one hour), these commands
+older than some implementation-defined time (_i.e._ two days), these commands
 will send a message back to the sender of the received message (`!reply`) or
 the group the message was sent to (`!reply-all`). If the message was not sent
 to a group, both behave equivalently.
@@ -240,14 +240,14 @@ Unless `--ping` is specified, users are not pinged.
 **Examples**
 
     !tgroupsof @user1
-      Groups of @user1: -none-
+      Groups of user1: -none-
 
-    !tgroupsof @user2
+    !tgroupsof --ping @user2
       Groups of @user2 (1): *group1
 
     !tgroupsof *group1
-      Groups of @user2 (1): *group1
-      Groups of @user3 (3): *group1, *group2, and *group3
+      Groups of user2 (1): *group1
+      Groups of user3 (3): *group1, *group2, and *group3
 
 ### !alias and !unalias
 
@@ -326,8 +326,8 @@ to them.
       @person2 not seen (3 pending messages).
 
     !seen *group
-      @person3 last seen here on {some date}, 1d 4h 5s ago.
-      @person4 last seen here on {some date}, 41d 23h 59m ago.
+      @person3 last seen here on {some date}, 1d 4h 5s ago (1 pending message).
+      @person4 last seen in &test on {some date}, 41d 23h 59m ago.
 
 ## User lists
 
