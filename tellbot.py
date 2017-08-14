@@ -919,7 +919,9 @@ class TellBot(basebot.Bot):
                 parts.append(n)
                 continue
             names = list(segments[n].values())
-            if not groups[n] or len(names) != len(groups[n]):
+            if not groups[n]:
+                names.append('-empty-')
+            elif len(names) != len(groups[n]):
                 names.append('...')
             parts.append('%s (%s)' % (n, format_list(names)))
         return (format_list(parts, 'no-one'), reasons)
