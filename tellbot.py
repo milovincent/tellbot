@@ -1490,10 +1490,10 @@ class TellBot(basebot.Bot):
                         reply('Unknown option %s.' % arg)
                         return
                     else:
-                        reply('Please specify group changes only.')
+                        reply('Please specify alias changes only.')
                         return
                 if base is None:
-                    reply('Please specify a group to show or change.')
+                    reply('Please specify a alias to show or change.')
                     return
                 elif cmdline[0] == '!unalias' and count == 0:
                     reply('Nothing to be done.')
