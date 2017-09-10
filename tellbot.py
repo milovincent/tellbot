@@ -72,7 +72,8 @@ total).</p>
       <tr><th align=left>From:&nbsp;</th><td>%(html_from)s</td></tr>
       <tr><th align=left>To:&nbsp;</th><td>%(html_to)s</td></tr>
       <tr><th align=left>Priority:&nbsp;</th><td>%(html_prio)s</td></tr>
-      <tr><th align=left>Text:&nbsp;</th><td>%(html_text)s</td></tr>
+      <tr><th align=left>Text:&nbsp;</th><td style="white-space: pre-wrap">\
+%(html_text)s</td></tr>
     </table></p>
     <p><small>Reply to this email to unsubscribe.</small></p>
   </body>
