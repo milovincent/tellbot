@@ -22,7 +22,7 @@ INBOX_CUTOFF = 172800 # 2 days
 REPLY_TIMEOUT = 172800 # 2 days
 GC_INTERVAL = 3600 # 1 hour
 NOTBOT_DELAY = 10 # 10 secs
-MAIL_DELIVER_COOLOFF = 604800 # 1 week
+MAIL_SEEN_COOLOFF = 604800 # 1 week
 MAIL_SEND_COOLOFF = 604800 # 1 week
 
 HELP_TEXT = '''
@@ -973,6 +973,7 @@ class TellBot(basebot.Bot):
         unread, oldest, newest = distr.message_bounds(user[0])
         update = distr.update_seen(user[0], user[1], now, unread,
                                    self.roomname)
+        distr.update_mail_throttle(user[0], time.time() + MAIL_SEEN_COOLOFF)
 
         # Prevent NotBot fallback from firing.
         if msg['sender']['session_id'] != self.session_id:
@@ -1074,7 +1075,6 @@ class TellBot(basebot.Bot):
         deliver_message()
         distr.update_seen(sender[0], sender[1], now, 0,
                           self.roomname)
-        distr.update_mail_throttle(sender[0], now + MAIL_DELIVER_COOLOFF)
 
         # ...Or none.
         if not messages:
