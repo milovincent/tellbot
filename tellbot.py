@@ -37,7 +37,10 @@ blob/master/USAGE.md.
 '''[1:-1]
 
 REPLY_HELP = ('Reply with a !reply to any single message to reply to the '
-    'author, or with a !reply-all to reply to the whole group (if any).')
+    'author, or with a !reply-all to reply to the group the message was '
+    'sent to (or the sender if none).')
+USERSPEC_HELP = ('Nicknames must be preceded by an @ sign and may not '
+    'contain spaces.')
 
 EMAIL_NOTIFICATION_TEMPLATE = '''
 From: %(from)s
@@ -1424,7 +1427,8 @@ class TellBot(basebot.Bot):
                         reply('Unknown option %s.' % arg)
                         return
                     else:
-                        reply('Please specify group changes only.')
+                        reply('Please specify group changes only. (%s)' %
+                              USERSPEC_HELP)
                         return
                 if groupname is None:
                     reply('Please specify a group to show or change.')
@@ -1491,7 +1495,8 @@ class TellBot(basebot.Bot):
                         reply('Unknown option %s.' % arg)
                         return
                     else:
-                        reply('Please specify alias changes only.')
+                        reply('Please specify alias changes only. (%s)' %
+                              USERSPEC_HELP)
                         return
                 if base is None:
                     reply('Please specify a alias to show or change.')
