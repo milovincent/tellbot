@@ -29,7 +29,7 @@ HELP_TEXT = '''
 To add a message to other users' mailbox, use
     !tell @user1 [@user2 ...] [*group1 ...] message
     !tnotify @user1 [@user2 ...] [*group1 ...] message
-To create or grow, or shrink a group of users, use
+To create or grow, or to shrink a group of users, use
     !tgroup *group @user1 [@user2 ...] [*group1 ...]
     !tgroup *group -@user1 [-@user2 ...] [-*group1 ...]
 For a thorough manual, see https://github.com/CylonicRaider/tellbot/\
@@ -1012,7 +1012,8 @@ class TellBot(basebot.Bot):
         # Format fancy recipient list.
         text = (text or '').strip()
         if not text:
-            reply('Will not tell %s.' % reclist)
+            reply('Nothing to tell %s (did you specify a message?).' %
+                  reclist)
             return
 
         # Schedule messages.
