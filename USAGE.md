@@ -9,6 +9,15 @@ Aside from the mandatory commands from the
 ["botrulez"](https://github.com/jedevc/botrulez), `@TellBot` implements the
 following concrete commands:
 
+- [!inbox](#inbox) — Check own mailbox.
+- [!tell](#tell-aka-tnotify) — Send messages.
+- [!reply / !reply-all](#reply-and-reply-all) — Reply to a message.
+- [!tgroup / !tungroup](#tgroup-and-tungroup) — Manage groups of users.
+- [!tgrouplist](#tgrouplist) — List groups (filtering by name).
+- [!tgroupsof](#tgroupsof) — List groups a user is in.
+- [!alias](#alias-and-unalias) — Manage aliases of a user.
+- [!seen](#seen) — Report when a user was last seen.
+
 ### !inbox
 
     !inbox [--stale]
