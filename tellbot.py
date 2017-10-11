@@ -1428,8 +1428,9 @@ class TellBot(basebot.Bot):
                         reply('Unknown option %s.' % arg)
                         return
                     else:
-                        reply('Please specify group changes only. (%s)' %
-                              USERSPEC_HELP)
+                        reply('Please specify only group changes or a '
+                              'single group name to display members of. '
+                              '(%s)' % USERSPEC_HELP)
                         return
                 if groupname is None:
                     reply('Please specify a group to show or change.')
@@ -1496,7 +1497,8 @@ class TellBot(basebot.Bot):
                         reply('Unknown option %s.' % arg)
                         return
                     else:
-                        reply('Please specify alias changes only. (%s)' %
+                        reply('Please specify only alias changes or a '
+                              'single name to display aliases of. (%s)' %
                               USERSPEC_HELP)
                         return
                 if base is None:
