@@ -1347,7 +1347,7 @@ class TellBot(basebot.Bot):
 
                 if not names:
                     reply('No groups.' if filt_all else
-                          'No groups mathing pattern.')
+                          'No groups matching pattern.')
                     return
 
                 # Group by first character.
