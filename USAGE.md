@@ -1,7 +1,8 @@
 # tellbot usage
 
-`@TellBot` is in a public alpha release, and under active development.
-The command set may change upon popular demand or developer decision.
+`@TellBot` has reached all of its intended functionality, and development is
+restricted to maintenance. The command set may change upon popular demand or
+developer decision.
 
 ## Commands
 
