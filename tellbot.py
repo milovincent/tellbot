@@ -1056,12 +1056,13 @@ class TellBot(basebot.Bot):
             # Add a delivery notice.
             def handle_delivery(reply):
                 distr.add_delivery(m, reply.data.id, reply.data.time)
+                # HACK: Wait a bit to avoid being kicked for spamming.
+                if len(messages) > 10: time.sleep(1)
                 deliver_message()
             try:
                 m = next(msgitr)
             except StopIteration:
                 return
-            distr.add_delivery(m, None, now)
             if m['reason'] == make_mention(sender[1]):
                 reason = ''
             else:
