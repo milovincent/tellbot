@@ -1070,7 +1070,7 @@ class TellBot(basebot.Bot):
             reply('[%s%s, %s ago] %s' % (
                 self._format_nick(m['from'], False, sender[1], True),
                 reason,
-                basebot.format_delta(now - m['timestamp'], False),
+                basebot.format_delta(time.time() - m['timestamp'], False),
                 m['text']), handle_delivery)
 
         # Deliver messages.
