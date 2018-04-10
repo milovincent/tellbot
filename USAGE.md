@@ -102,6 +102,8 @@ closeness to the corresponding `@NotBot` command.
 
 #### !notify
 
+    !notify [--ping] [--priority=<level>] <user-list> [--] <message>
+
 Depending on the configuration, `@TellBot` may respond to a `!notify` command
 in the same way as to a `!tell`, either immediately, or after a delay (and
 unless something else does), or not at all. This (if enabled) renders
@@ -180,16 +182,6 @@ it until it is replaced.
     !tgrouplist [--ping] *<group>
 
 `!tgrouplist` is an alias for `!tgroup` that only allows listing a group.
-
-**Examples**
-
-    !tgrouplist *group
-      Group: *group
-      Members (2): person1, person2
-
-    !tgrouplist --ping *group
-      Group: *group
-      Members (2): @person1, @person2
 
 ### !tlistgroups
 
