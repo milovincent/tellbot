@@ -68,6 +68,7 @@ Each message has an associated priority that determines whether and with how
 much effort the recipient will be notified of it (_i.e._, currently, whether
 an email notification will be sent if the user has opted in). Matching is
 case-insensitive. The priority levels are:
+
 - `LOW`: A notification will never be sent.
 - `NORMAL`: A notification will be sent if the user had been away for some
   time (the default is a week) and has not received another notification in
@@ -119,7 +120,7 @@ If (and only if) used as direct replies to delivered messages that are not
 older than some implementation-defined time (_i.e._ two days), these commands
 will send a message back to the sender of the received message (`!reply`) or
 the group the message was sent to (`!reply-all`). If the message was not sent
-to a group, both behave equivalently.
+to a group, `!reply-all` behaves like `!reply`.
 
 The message starts immediately after the command (and can in particular start
 with any character). Implicit self exclusion happens in the case of
@@ -181,7 +182,8 @@ it until it is replaced.
 
     !tgrouplist [--ping] *<group>
 
-`!tgrouplist` is an alias for `!tgroup` that only allows listing a group.
+`!tgrouplist` is an alias for `!tgroup` that only allows listing a group. It
+is provided for closeness to the corresponding `@NotBot` command.
 
 ### !tlistgroups
 
@@ -218,8 +220,8 @@ metacharacters:
     treated specially.
 
     Thus, `[][]` matches a closing or an opening bracket; `[!]]` matches
-    anything but a closing bracket; `[?-]` matches a question mark or a
-    hyphen; `[a-z]` matches a letter of (see below) any case.
+    any single character but a closing bracket; `[?-]` matches a question
+    mark or a hyphen; `[a-z]` matches a letter of (see below) any case.
 
 The pattern must match the entire group name (ignoring case); to "de-anchor"
 it from an end, use leading or trailing asterisks `*`.
@@ -284,9 +286,9 @@ by all other aliases of users contained in the list (*except* `user`), and
 installs the result as a new alias list instead of the former one of `user`
 (and any added members).
 
-`!unalias` builds the `user-list` — which again may contain no groups — and
-removes the entries of `user-list` from the alias list of `user`; it cannot
-add new aliases.
+`!unalias` builds the `user-list` — which again may contain no groups —
+starting from the empty list and removes the entries of `user-list` from the
+alias list of `user`; it cannot add new aliases.
 
 Unless `--ping` is passed, user names are not @-mentioned to avoid
 unnecessary alerting.
@@ -374,14 +376,15 @@ difference operator; applied to the unitary set containing the specified user
 in one case, or to the set of the members of a group in the other. Beyond
 the set semantics, the operators attempt to maintain the relative order of
 users; the addition operators append "new" users to the end of the list.
-Therefore, removing a user and re-adding it will result in pushing it to
+Therefore, removing a user and re-adding them will result in pushing them to
 the end.
 
 The order of users does not have any effect _per se_, but is preserved upon
-display; it also affects the group listing shortening in the reply to `!tell`
-(_i.e._ the omitting of users already mentioned elsewhere in the reply).
+display; it also affects the group listing shortening in the bot's response
+to `!tell` (_i.e._ the omitting of users already mentioned elsewhere in the
+response).
 
-**Note** that the operations are not commutative; `-@user +@user` will have
+**Note** that the operations are not commutative: `-@user +@user` will have
 a different effect from both `+@user -@user` and discarding both operations
 (respectively, the user will shifted to the end of the list, the user will
 be removed, the user will not be affected at all).
