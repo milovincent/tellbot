@@ -37,7 +37,7 @@ If a user has been away for a long time (_i.e._ more than two days),
 recipient (as some other bots do), but instead shows a notification, which
 advises to use this command.
 
-**Examples**
+#### Examples
 
     !inbox
       No mail.
@@ -92,7 +92,7 @@ interpreted as the explicit intent of delivering the message to yourself.
 `!tell` and `!tnotify` are exactly equivalent; the latter is provided for
 closeness to the corresponding `@NotBot` command.
 
-**Examples**
+#### Examples
 
     !tell @person1 something
 
@@ -125,7 +125,7 @@ The message starts immediately after the command (and can in particular start
 with any character). Implicit self exclusion happens in the case of
 `!reply-all`, and does not happen for `!reply`.
 
-**Examples**
+#### Examples
 
     [You, 5s ago] some message
       !reply some reply
@@ -155,7 +155,7 @@ unnecessary alerting.
 If `description` is passed, subsequent queries of that group will display
 it until it is replaced.
 
-**Examples**
+#### Examples
 
     !tgroup *group @person1 @person2
       Group: *group
@@ -191,8 +191,10 @@ Enumerate all groups (or those whose name without the `*` sigil match a
 globbing `pattern`) known to `@TellBot`. The output is alphabetically
 sorted.
 
-**Pattern syntax**: `pattern` may not contain whitespace, and can include the
-following metacharacters:
+#### Pattern syntax
+
+`pattern` may not contain whitespace, and can include the following
+metacharacters:
 
 -   `?` matches an arbitrary single character.
 
@@ -222,7 +224,7 @@ following metacharacters:
 The pattern must match the entire group name (ignoring case); to "de-anchor"
 it from an end, use leading or trailing asterisks `*`.
 
-**Examples**
+#### Examples
 
     !tlistgroups
       *anyquestions?
@@ -256,7 +258,7 @@ Reply with the groups the users in [`user-list`](#user-lists) are members of.
 
 Unless `--ping` is specified, users are not pinged.
 
-**Examples**
+#### Examples
 
     !tgroupsof @user1
       Groups of user1: -none-
@@ -306,7 +308,7 @@ Hence, creating and removing an alias again would not have too many grave
 consequences if other information concerning that user is not accessed in the
 meantime.
 
-**Examples**
+#### Examples
 
     !alias @user1 @user2 @user3
       Aliases of @user1 before: user1
@@ -336,7 +338,7 @@ last seen (_i.e._ posted something in a room observed by `@TellBot` whilst it
 was running), the rooms they were in, and counts of messages pending delivery
 to them.
 
-**Examples**
+#### Examples
 
     !seen @person1
       @person1 last seen here on {some date}, 5m 2s ago.
@@ -384,7 +386,7 @@ a different effect from both `+@user -@user` and discarding both operations
 (respectively, the user will shifted to the end of the list, the user will
 be removed, the user will not be affected at all).
 
-**Examples**
+#### Examples
 
 For basic examples, see the respective commands.
 
