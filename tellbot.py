@@ -1329,7 +1329,7 @@ class TellBot(basebot.Bot):
                     reason='<re> ' + reason)
 
             # Enumerate available groups.
-            elif cmdline[0] == '!tgrouplist':
+            elif cmdline[0] == '!tlistgroups':
                 self._log_command(cmdline)
                 # Parse arguments.
                 if len(cmdline) == 1:
@@ -1396,8 +1396,8 @@ class TellBot(basebot.Bot):
                         ping), count, format_list(['*' + i for i in groups],
                         '-none-')))
 
-            # Update a group.
-            elif cmdline[0] in ('!tgroup', '!tungroup'):
+            # Update or list a group.
+            elif cmdline[0] in ('!tgroup', '!tungroup', '!tgrouplist'):
                 self._log_command(cmdline)
                 # Parse arguments.
                 groupname, members, groups, ping = None, None, None, False
@@ -1435,7 +1435,14 @@ class TellBot(basebot.Bot):
                               '(%s)' % USERSPEC_HELP)
                         return
                 if groupname is None:
-                    reply('Please specify a group to show or change.')
+                    if cmdline[0] == '!tgrouplist':
+                        reply('Please specify a group to show.')
+                    else:
+                        reply('Please specify a group to show or change.')
+                    return
+                elif cmdline[0] == '!tgrouplist' and (newdesc is not None or
+                                                      count != 0):
+                    reply('Use !tgroup to edit a group.')
                     return
 
                 # Reply heading.

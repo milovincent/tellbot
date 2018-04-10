@@ -14,7 +14,8 @@ following concrete commands:
 - [!tell](#tell-aka-tnotify) — Send messages.
 - [!reply / !reply-all](#reply-and-reply-all) — Reply to a message.
 - [!tgroup / !tungroup](#tgroup-and-tungroup) — Manage groups of users.
-- [!tgrouplist](#tgrouplist) — List groups (filtering by name).
+- [!tgrouplist](#tgrouplist) — List the members of a group.
+- [!tlistgroups](#tlistgroups) — List groups (filtering by name).
 - [!tgroupsof](#tgroupsof) — List groups a user is in.
 - [!alias](#alias-and-unalias) — Manage aliases of a user.
 - [!seen](#seen) — Report when a user was last seen.
@@ -174,16 +175,32 @@ it until it is replaced.
       Description: A demonstration group.
       Members: -none-
 
-### !tgrouplist
+#### !tgrouplist
 
-    !tgrouplist [pattern]
+    !tgrouplist [--ping] *<group>
+
+`!tgrouplist` is an alias for `!tgroup` that only allows listing a group.
+
+**Examples**
+
+    !tgrouplist *group
+      Group: *group
+      Members (2): person1, person2
+
+    !tgrouplist --ping *group
+      Group: *group
+      Members (2): @person1, @person2
+
+### !tlistgroups
+
+    !tlistgroups [pattern]
 
 Enumerate all groups (or those whose name without the `*` sigil match a
 globbing `pattern`) known to `@TellBot`. The output is alphabetically
 sorted.
 
-`pattern` may not contain whitespace, and can include the following
-metacharacters:
+**Pattern syntax**: `pattern` may not contain whitespace, and can include the
+following metacharacters:
 
 -   `?` matches an arbitrary single character.
 
@@ -215,28 +232,28 @@ it from an end, use leading or trailing asterisks `*`.
 
 **Examples**
 
-    !tgrouplist
+    !tlistgroups
       *anyquestions?
       *botdevs
       *groupA, *groupB, *groupC, *groupD
       *test, *testing
 
-    !tgrouplist group?
+    !tlistgroups group?
       *groupA, *groupB, *groupC, *groupD
 
-    !tgrouplist *st*
+    !tlistgroups *st*
       *anyquestions?
       *test, *testing
 
-    !tgrouplist [gt]*
+    !tlistgroups [gt]*
       *groupA, *groupB, *groupC, *groupD
       *test, *testing
 
-    !tgrouplist *[c-g]
+    !tlistgroups *[c-g]
       *groupC, *groupD
       *testing
 
-    !tgrouplist *[?]
+    !tlistgroups *[?]
       *anyquestions?
 
 ### !tgroupsof
