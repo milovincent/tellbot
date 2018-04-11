@@ -28,10 +28,12 @@ MAIL_SEND_COOLOFF = 604800 # 1 week
 HELP_TEXT = '''
 To add a message to other users' mailbox, use
     !tell @user1 [@user2 ...] [*group1 ...] message
-    !tnotify @user1 [@user2 ...] [*group1 ...] message
-To create or grow, or to shrink a group of users, use
+To create or grow a group of users, use
     !tgroup *group @user1 [@user2 ...] [*group1 ...]
+To shrink a group, use
     !tgroup *group -@user1 [-@user2 ...] [-*group1 ...]
+To list the members of a group, use
+    !tgrouplist *group
 For a thorough manual, see https://github.com/CylonicRaider/tellbot/\
 blob/master/USAGE.md.
 '''[1:-1]
