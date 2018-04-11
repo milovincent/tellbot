@@ -75,8 +75,7 @@ total).</p>
       <tr><th align=left>From:&nbsp;</th><td>%(html_from)s</td></tr>
       <tr><th align=left>To:&nbsp;</th><td>%(html_to)s</td></tr>
       <tr><th align=left>Priority:&nbsp;</th><td>%(html_prio)s</td></tr>
-      <tr><th align=left>Text:&nbsp;</th><td style="white-space: pre-wrap">\
-%(html_text)s</td></tr>
+      <tr><th align=left>Text:&nbsp;</th><td>%(html_text)s</td></tr>
     </table></p>
     <p><small>Reply to this email to unsubscribe.</small></p>
   </body>
@@ -838,7 +837,7 @@ class Mailer:
             'html_from': htmlenc(msg_from),
             'html_to': htmlenc(msg_to),
             'html_prio': htmlenc(msg_priority),
-            'html_text': htmlenc(message['text'])
+            'html_text': htmlenc(message['text']).replace('\n', '<br/>')
         }).encode('utf-8'))
 
     def send(self, message):
