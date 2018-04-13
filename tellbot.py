@@ -886,10 +886,10 @@ class TellBot(basebot.Bot):
     def _format_nick(self, nick, ping=True, subject=None, title=False):
         nnick = basebot.normalize_nick(nick)
         ttr = (titlefirst if title else lambda x: x)
-        if subject and nnick == basebot.normalize_nick(subject):
-            return ttr('you')
-        elif nnick == basebot.normalize_nick(self.nickname):
+        if nnick == basebot.normalize_nick(self.nickname):
             return ttr('me')
+        elif subject and nnick == basebot.normalize_nick(subject):
+            return ttr('you')
         else:
             return (make_mention if ping else seminormalize_nick)(nick)
 
