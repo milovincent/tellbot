@@ -1,4 +1,4 @@
-# tellbot usage
+# `@TellBot` usage
 
 `@TellBot` has reached all of its intended functionality, and development is
 restricted to maintenance. The command set may change upon popular demand or
