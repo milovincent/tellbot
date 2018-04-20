@@ -485,39 +485,39 @@ class NotificationDistributorSQLite(NotificationDistributor):
             self.lock.conn = self.conn
             # Message table.
             self.curs.execute('CREATE TABLE IF NOT EXISTS messages ('
-                                  'sender TEXT,'
-                                  'recipient TEXT,'
-                                  'reason TEXT,'
-                                  'text TEXT,'
-                                  'timestamp REAL,'
-                                  'delivered_to TEXT UNIQUE,'
-                                  'delivered REAL,'
+                                  'sender TEXT, '
+                                  'recipient TEXT, '
+                                  'reason TEXT, '
+                                  'text TEXT, '
+                                  'timestamp REAL, '
+                                  'delivered_to TEXT UNIQUE, '
+                                  'delivered REAL, '
                                   'priority TEXT'
                               ')')
             # Group table.
             self.curs.execute('CREATE TABLE IF NOT EXISTS groups ('
-                                  'groupname TEXT,'
-                                  'member TEXT,'
-                                  'name TEXT,'
+                                  'groupname TEXT, '
+                                  'member TEXT, '
+                                  'name TEXT, '
                                   'PRIMARY KEY (groupname, member)'
                               ')')
             # Group description table.
             self.curs.execute('CREATE TABLE IF NOT EXISTS groupdescs ('
-                                  'groupname TEXT PRIMARY KEY,'
+                                  'groupname TEXT PRIMARY KEY, '
                                   'description TEXT'
                               ')')
             # Seen table.
             self.curs.execute('CREATE TABLE IF NOT EXISTS seen ('
-                                  'user TEXT PRIMARY KEY,'
-                                  'name TEXT,'
-                                  'timestamp REAL,'
-                                  'unread INTEGER,'
+                                  'user TEXT PRIMARY KEY, '
+                                  'name TEXT, '
+                                  'timestamp REAL, '
+                                  'unread INTEGER, '
                                   'room TEXT'
                               ')')
             # Alias table.
             self.curs.execute('CREATE TABLE IF NOT EXISTS aliases ('
-                                  'base TEXT,'
-                                  'user TEXT PRIMARY KEY,'
+                                  'base TEXT, '
+                                  'user TEXT PRIMARY KEY, '
                                   'name TEXT'
                               ')')
             # Mail table.
@@ -527,13 +527,13 @@ class NotificationDistributorSQLite(NotificationDistributor):
             # Inform users that changing their primary alias may prevent them
             # from getting mail.
             self.curs.execute('CREATE TABLE IF NOT EXISTS mailinfo ('
-                                  'user TEXT PRIMARY KEY,'
-                                  'address TEXT,'
+                                  'user TEXT PRIMARY KEY, '
+                                  'address TEXT, '
                                   'throttle REAL'
                               ')')
             # Configuration table.
             self.curs.execute('CREATE TABLE IF NOT EXISTS settings ('
-                                  'name TEXT PRIMARY KEY,'
+                                  'name TEXT PRIMARY KEY, '
                                   'value TEXT'
                               ')')
             # Schema upgrades.
