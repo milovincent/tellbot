@@ -492,7 +492,8 @@ class NotificationDistributorSQLite(NotificationDistributor):
                                   'timestamp REAL, '
                                   'delivered_to TEXT UNIQUE, '
                                   'delivered REAL, '
-                                  'priority TEXT'
+                                  'priority TEXT, '
+                                  'room TEXT'
                               ')')
             # Group table.
             self.curs.execute('CREATE TABLE IF NOT EXISTS groups ('
@@ -545,7 +546,7 @@ class NotificationDistributorSQLite(NotificationDistributor):
                         'ADD COLUMN ' + coldesc)
             self.curs.execute('PRAGMA table_info(messages);')
             msgcols = set(i[1] for i in self.curs.fetchall())
-            for coldesc in ('priority TEXT',):
+            for coldesc in ('priority TEXT', 'room TEXT'):
                 if coldesc.partition(' ')[0] not in msgcols:
                     self.curs.execute('ALTER TABLE messages '
                         'ADD COLUMN ' + coldesc)
@@ -554,14 +555,14 @@ class NotificationDistributorSQLite(NotificationDistributor):
         return {'id': item[0], 'from': item[1], 'to': item[2],
                 'reason': item[3], 'text': item[4], 'timestamp': item[5],
                 'delivered_to': item[6], 'delivered': item[7],
-                'priority': item[8]}
+                'priority': item[8], 'room': item[9]}
     def _unwrap_messages(self, it):
         return list(map(self._unwrap_message, it))
     def _wrap_message(self, message):
         return (message.get('id'), message['from'], message['to'],
                 message['reason'], message['text'], message['timestamp'],
                 message.get('delivered_to'), message.get('delivered'),
-                message.get('priority'))
+                message.get('priority'), message.get('room'))
 
     def query_user(self, name):
         ret = self.normalize_user(name)
@@ -706,7 +707,7 @@ class NotificationDistributorSQLite(NotificationDistributor):
         message['to'] = user
         with self.lock.committing:
             self.curs.execute('INSERT INTO messages '
-                'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 self._wrap_message(message)[1:])
 
     def query_delivery(self, msgid):
@@ -1019,7 +1020,7 @@ class TellBot(basebot.Bot):
 
         # Schedule messages.
         base = {'text': text, 'from': sender[1], 'timestamp': time.time(),
-                'priority': priority}
+                'priority': priority, 'room': self.roomname}
         for user, nick in recipients:
             cur_reason = reason or reasons[user]
             message = dict(base, to=user, tonick=nick, reason=cur_reason)
@@ -1045,12 +1046,11 @@ class TellBot(basebot.Bot):
         # Format a delivery reason.
         def format_reason(src):
             if src.startswith('<re> '):
-                res = format_reason(src[5:])
-                return ' replying' + res
+                return 'replying ' + format_reason(src[5:])
             elif src.startswith('@'):
-                return ' to ' + self._format_nick(src[1:], False, sender[1])
+                return 'to ' + self._format_nick(src[1:], False, sender[1])
             else:
-                return ' to ' + src
+                return 'to ' + src
 
         # Actually deliver a message.
         def deliver_message():
@@ -1067,10 +1067,15 @@ class TellBot(basebot.Bot):
             if m['reason'] == make_mention(sender[1]):
                 reason = ''
             else:
-                reason = format_reason(m['reason'])
-            reply('[%s%s, %s ago] %s' % (
+                reason = ' ' + format_reason(m['reason'])
+            roomname = m.get('room')
+            if roomname is None or roomname == self.roomname:
+                room = ''
+            else:
+                room = ' from &%s' % roomname
+            reply('[%s%s%s, %s ago] %s' % (
                 self._format_nick(m['from'], False, sender[1], True),
-                reason,
+                reason, room,
                 basebot.format_delta(time.time() - m['timestamp'], False),
                 m['text']), handle_delivery)
 
