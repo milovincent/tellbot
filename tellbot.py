@@ -1294,8 +1294,7 @@ class TellBot(basebot.Bot):
                     return
                 cause = distr.query_delivery(meta['msg']['parent'])
                 if cause is None:
-                    # Disabled for interoperability with other bots.
-                    #reply('Message not recognized.')
+                    reply('Message not recognized.')
                     return
                 recipient = distr.normalize_user(cause['from'])
 
