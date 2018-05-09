@@ -17,7 +17,7 @@ following concrete commands:
 - [`!tgrouplist`](#tgrouplist) — List the members of a group.
 - [`!tlistgroups`](#tlistgroups) — List groups (filtering by name).
 - [`!tgroupsof`](#tgroupsof) — List groups a user is in.
-- [`!alias`](#alias-and-unalias) — Manage aliases of a user.
+- [`!alias` / `!unalias`](#alias-and-unalias) — Manage aliases of a user.
 - [`!seen`](#seen) — Report when a user was last seen.
 
 ### !inbox
