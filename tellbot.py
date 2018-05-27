@@ -1651,23 +1651,22 @@ class TellBotManager(basebot.BotManager):
     @classmethod
     def prepare_parser(cls, parser, config):
         basebot.BotManager.prepare_parser(parser, config)
-        parser.add_option('--db', dest='db', metavar='<path>',
-                          help='SQLite database file for message '
+        parser.add_argument('--db', metavar='PATH',
+                            help='SQLite database file for message '
                               'persistence (default in-memory)')
-        parser.add_option('--config', action='append', dest='confopts',
-                          metavar='<key=value>',
-                          help='A setting to apply before starting')
+        parser.add_argument('--config', action='append', dest='confopts',
+                            metavar='KEY=VALUE',
+                            help='A setting to apply before starting')
 
     @classmethod
-    def interpret_args(cls, options, arguments, config):
-        bots, config = basebot.BotManager.interpret_args(options,
-            arguments, config)
+    def interpret_args(cls, arguments, config):
+        bots, config = basebot.BotManager.interpret_args(arguments, config)
         for name in ('db',):
-            value = getattr(options, name)
+            value = getattr(arguments, name)
             if value is not None:
                 config[name] = value
         config['confopts'] = []
-        for el in getattr(options, 'confopts') or ():
+        for el in getattr(arguments, 'confopts') or ():
             try:
                 n, v = el.split('=', 1)
             except ValueError:
