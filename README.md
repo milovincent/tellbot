@@ -8,3 +8,5 @@ turn has own dependencies.
 ## Got here from the !help message?
 
 See [USAGE.md](USAGE.md) for documentation of the in-chat interface.
+
+@DoctorNumberFour's fork attempts to increase !notify capabilities and their reliability
